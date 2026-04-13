@@ -1,10 +1,11 @@
-// src/app/layout.tsx - VERSÃO CORRIGIDA COMPLETA
+// src/app/layout.tsx - VERSÃO CORRIGIDA
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ClienteAuthProvider } from "@/contexts/ClienteAuthContext";
 import { LoadingBar } from "@/components/ui/LoadingBar";
 import { Toaster } from "react-hot-toast";
 import Script from "next/script";
+import Image from "next/image"; // ADICIONAR ESTA LINHA
 import "./globals.css";
 
 export default function RootLayout({
@@ -30,11 +31,9 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.ico" />
       </head>
       <body>
-        {/* Providers em ordem correta */}
         <ThemeProvider>
           <AuthProvider>
             <ClienteAuthProvider>
-              {/* LoadingBar GLOBAL - fora do fluxo de conteúdo */}
               <LoadingBar />
               {children}
               <Toaster position="top-right" />
@@ -42,20 +41,20 @@ export default function RootLayout({
           </AuthProvider>
         </ThemeProvider>
 
-        {/* Scripts SEM onError - não é permitido em componentes server-side */}
+        {/* MERCADOPAGO - MUDAR PARA lazyOnload */}
         <Script
           src="https://sdk.mercadopago.com/js/v2"
-          strategy="afterInteractive"
+          strategy="lazyOnload"  // ALTERADO de afterInteractive
         />
 
-        {/* Google tag (gtag.js) */}
+        {/* Google Analytics - MUDAR PARA lazyOnload */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-QZSREQ90Y0"
-          strategy="afterInteractive"
+          strategy="lazyOnload"  // ALTERADO de afterInteractive
         />
         <Script
           id="google-analytics"
-          strategy="afterInteractive"
+          strategy="lazyOnload"  // ALTERADO de afterInteractive
           dangerouslySetInnerHTML={{
             __html: `
               window.dataLayer = window.dataLayer || [];
@@ -66,10 +65,10 @@ export default function RootLayout({
           }}
         />
 
-        {/* Facebook Pixel */}
+        {/* Facebook Pixel - MUDAR PARA lazyOnload */}
         <Script
           id="fb-pixel"
-          strategy="afterInteractive"
+          strategy="lazyOnload"  // ALTERADO de afterInteractive
           dangerouslySetInnerHTML={{
             __html: `
               !function(f,b,e,v,n,t,s)
@@ -86,7 +85,7 @@ export default function RootLayout({
           }}
         />
         <noscript>
-          <img
+          <Image  // TROCADO de <img> para <Image />
             height="1"
             width="1"
             style={{ display: "none" }}
