@@ -1,3 +1,4 @@
+// src/app/dashboard/banners/BannersContent.tsx
 "use client";
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,7 @@ export default function BannersContent() {
   const [modalAberto, setModalAberto] = useState(false);
   const [bannerEditando, setBannerEditando] = useState<Banner | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [salvandoOrdem, setSalvandoOrdem] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -32,6 +34,7 @@ export default function BannersContent() {
     link: "",
     texto_botao: "Ver Coleção",
     ativo: true,
+    ordem: 0
   });
 
   useEffect(() => {
@@ -59,13 +62,11 @@ export default function BannersContent() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validar tipo de arquivo
     if (!file.type.startsWith("image/")) {
       toast.error("Por favor, selecione uma imagem válida");
       return;
     }
 
-    // Validar tamanho (máximo 5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast.error("A imagem deve ter no máximo 5MB");
       return;
@@ -115,14 +116,18 @@ export default function BannersContent() {
 
     try {
       const adminClient = getAdminClient();
+
       const bannerData = {
-        ...formData,
+        titulo: formData.titulo,
+        subtitulo: formData.subtitulo,
+        link: formData.link,
+        texto_botao: formData.texto_botao,
+        ativo: formData.ativo,
+        ordem: formData.ordem,
         imagem_url: bannerEditando.imagem_url,
-        ordem: banners.length, // Coloca no final por padrão
       };
 
       if (bannerEditando?.id) {
-        // Editar existente
         const { error } = await adminClient
           .from("banners")
           .update(bannerData)
@@ -131,7 +136,6 @@ export default function BannersContent() {
         if (error) throw error;
         toast.success("Banner atualizado com sucesso!");
       } else {
-        // Criar novo
         const { error } = await adminClient
           .from("banners")
           .insert([bannerData]);
@@ -142,7 +146,7 @@ export default function BannersContent() {
 
       setModalAberto(false);
       setBannerEditando(null);
-      carregarBanners();
+      await carregarBanners();
     } catch (error) {
       console.error("Erro ao salvar banner:", error);
       toast.error("Erro ao salvar banner");
@@ -157,7 +161,6 @@ export default function BannersContent() {
     try {
       const adminClient = getAdminClient();
 
-      // Deletar imagem do storage
       const imagePath = banner.imagem_url.split("/").pop();
       if (imagePath) {
         await adminClient.storage
@@ -165,7 +168,6 @@ export default function BannersContent() {
           .remove([imagePath]);
       }
 
-      // Deletar registro do banco
       const { error } = await adminClient
         .from("banners")
         .delete()
@@ -174,7 +176,7 @@ export default function BannersContent() {
       if (error) throw error;
 
       toast.success("Banner excluído com sucesso!");
-      carregarBanners();
+      await carregarBanners();
     } catch (error) {
       console.error("Erro ao excluir banner:", error);
       toast.error("Erro ao excluir banner");
@@ -182,33 +184,53 @@ export default function BannersContent() {
   }
 
   async function handleDragEnd(result: any) {
-    if (!result.destination) return;
+    if (!result.destination || salvandoOrdem) return;
 
     const items = Array.from(banners);
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
 
-    // Atualizar ordem localmente
-    setBanners(items);
+    // Atualizar ordem localmente com novos números
+    const novosBanners = items.map((item, index) => ({
+      ...item,
+      ordem: index
+    }));
+    
+    setBanners(novosBanners);
+    setSalvandoOrdem(true);
+    
+    // Mostrar toast de salvando
+    const toastId = toast.loading("Salvando nova ordem...");
 
-    // Atualizar ordem no banco
     try {
       const adminClient = getAdminClient();
-      const updates = items.map((item, index) => ({
-        id: item.id,
-        ordem: index,
-      }));
-
-      for (const update of updates) {
-        await adminClient
+      
+      // Atualizar cada banner com sua nova ordem
+      for (const banner of novosBanners) {
+        const { error } = await adminClient
           .from("banners")
-          .update({ ordem: update.ordem })
-          .eq("id", update.id);
+          .update({ ordem: banner.ordem })
+          .eq("id", banner.id);
+
+        if (error) throw error;
       }
+      
+      // Atualizar toast para sucesso
+      toast.success(`Ordem atualizada! Banner movido da posição ${result.source.index + 1} para ${result.destination.index + 1}`, {
+        id: toastId,
+        duration: 3000
+      });
+      
     } catch (error) {
       console.error("Erro ao reordenar banners:", error);
-      toast.error("Erro ao salvar ordem");
-      carregarBanners(); // Recarregar estado original
+      toast.error("Erro ao salvar ordem. Recarregando...", {
+        id: toastId,
+        duration: 4000
+      });
+      // Recarregar estado original em caso de erro
+      await carregarBanners();
+    } finally {
+      setSalvandoOrdem(false);
     }
   }
 
@@ -233,6 +255,7 @@ export default function BannersContent() {
               link: "",
               texto_botao: "Ver Coleção",
               ativo: true,
+              ordem: banners.length,
             });
             setModalAberto(true);
           }}
@@ -257,17 +280,21 @@ export default function BannersContent() {
                   draggableId={banner.id}
                   index={index}
                 >
-                  {(provided) => (
+                  {(provided, snapshot) => (
                     <div
                       ref={provided.innerRef}
                       {...provided.draggableProps}
-                      className="bg-white rounded-lg shadow border p-4 flex items-center gap-4"
+                      className={`bg-white rounded-lg shadow border p-4 flex items-center gap-4 transition-all ${
+                        snapshot.isDragging ? "shadow-lg ring-2 ring-blue-500 opacity-50" : ""
+                      } ${salvandoOrdem ? "pointer-events-none opacity-60" : ""}`}
                     >
                       <div
                         {...provided.dragHandleProps}
-                        className="cursor-move text-gray-400 hover:text-gray-600"
+                        className="cursor-move text-gray-400 hover:text-gray-600 p-2"
                       >
-                        ⋮⋮
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                        </svg>
                       </div>
 
                       <div className="w-32 h-20 relative flex-shrink-0">
@@ -285,14 +312,14 @@ export default function BannersContent() {
                           <p className="text-sm text-gray-600">{banner.subtitulo}</p>
                         )}
                         <div className="flex items-center gap-4 mt-2 text-sm">
-                          <span className={`px-2 py-1 rounded-full ${
+                          <span className={`px-2 py-1 rounded-full text-xs ${
                             banner.ativo 
                               ? "bg-green-100 text-green-800" 
                               : "bg-gray-100 text-gray-800"
                           }`}>
                             {banner.ativo ? "Ativo" : "Inativo"}
                           </span>
-                          <span className="text-gray-500">
+                          <span className="text-gray-500 text-xs">
                             Ordem: {banner.ordem}
                           </span>
                         </div>
@@ -308,16 +335,17 @@ export default function BannersContent() {
                               link: banner.link || "",
                               texto_botao: banner.texto_botao || "Ver Coleção",
                               ativo: banner.ativo,
+                              ordem: banner.ordem,
                             });
                             setModalAberto(true);
                           }}
-                          className="text-blue-600 hover:text-blue-800"
+                          className="text-blue-600 hover:text-blue-800 px-3 py-1 rounded text-sm"
                         >
                           Editar
                         </button>
                         <button
                           onClick={() => handleDelete(banner)}
-                          className="text-red-600 hover:text-red-800"
+                          className="text-red-600 hover:text-red-800 px-3 py-1 rounded text-sm"
                         >
                           Excluir
                         </button>
@@ -356,7 +384,7 @@ export default function BannersContent() {
               {/* Upload de imagem */}
               <div className="mb-6">
                 <label className="block text-sm font-medium mb-2">
-                  Imagem do Banner
+                  Imagem do Banner *
                 </label>
                 
                 {bannerEditando?.imagem_url ? (
@@ -424,7 +452,7 @@ export default function BannersContent() {
                     required
                     value={formData.titulo}
                     onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Ex: Black November"
                   />
                 </div>
@@ -437,7 +465,7 @@ export default function BannersContent() {
                     type="text"
                     value={formData.subtitulo}
                     onChange={(e) => setFormData({ ...formData, subtitulo: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Ex: Comece a economizar em grande estilo"
                   />
                 </div>
@@ -450,7 +478,7 @@ export default function BannersContent() {
                     type="text"
                     value={formData.link}
                     onChange={(e) => setFormData({ ...formData, link: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Ex: /categoria/promocoes"
                   />
                 </div>
@@ -463,9 +491,27 @@ export default function BannersContent() {
                     type="text"
                     value={formData.texto_botao}
                     onChange={(e) => setFormData({ ...formData, texto_botao: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                    placeholder="Ex: Ver Coleção"
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
+                </div>
+
+                {/* Campo ORDEM - AGORA VISÍVEL */}
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Número da Ordem
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="999"
+                    value={formData.ordem}
+                    onChange={(e) => setFormData({ ...formData, ordem: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="0, 1, 2, 3..."
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Defina a posição do banner. Números menores aparecem primeiro.
+                  </p>
                 </div>
 
                 <div className="flex items-center">
@@ -474,7 +520,7 @@ export default function BannersContent() {
                     id="ativo"
                     checked={formData.ativo}
                     onChange={(e) => setFormData({ ...formData, ativo: e.target.checked })}
-                    className="h-4 w-4 text-blue-600 rounded border-gray-300"
+                    className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                   />
                   <label htmlFor="ativo" className="ml-2 text-sm text-gray-700">
                     Banner ativo
@@ -486,14 +532,14 @@ export default function BannersContent() {
                 <button
                   type="button"
                   onClick={() => setModalAberto(false)}
-                  className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                  className="px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={!bannerEditando?.imagem_url}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {bannerEditando?.id ? "Atualizar" : "Criar"} Banner
                 </button>

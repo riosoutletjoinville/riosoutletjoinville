@@ -134,6 +134,7 @@ export interface PrePedidoModalProps {
     pedidoAnterior?: PedidoAnterior;
     saldoPedidoAnterior?: number;
     valorProdutosNovos?: number;
+    naoBaixarEstoque?: boolean; // 👈 ADICIONE ESTA LINHA
   }) => Promise<void>;
   usuarioSelecionado: Usuario | null;
   onUsuarioChange: (usuario: Usuario) => void;
@@ -195,6 +196,9 @@ export default function PrePedidoModal({
   );
   const [showVincularPedido, setShowVincularPedido] = useState(false);
   const [saldoPedidoAnterior, setSaldoPedidoAnterior] = useState(0);
+
+  
+const [naoBaixarEstoque, setNaoBaixarEstoque] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -444,73 +448,74 @@ export default function PrePedidoModal({
   };
 
   const handleConfirmarPedido = async () => {
-    if (!clienteSelecionado) {
-      Swal.fire("Atenção", "Selecione um cliente para continuar", "warning");
-      return;
-    }
+  if (!clienteSelecionado) {
+    Swal.fire("Atenção", "Selecione um cliente para continuar", "warning");
+    return;
+  }
 
-    if (!usuarioSelecionado) {
-      Swal.fire("Atenção", "Selecione um usuário responsável", "warning");
-      return;
-    }
+  if (!usuarioSelecionado) {
+    Swal.fire("Atenção", "Selecione um usuário responsável", "warning");
+    return;
+  }
 
-    if (itensPedido.length === 0) {
-      Swal.fire(
-        "Atenção",
-        "Adicione pelo menos um produto ao pedido",
-        "warning"
-      );
-      return;
-    }
+  if (itensPedido.length === 0) {
+    Swal.fire(
+      "Atenção",
+      "Adicione pelo menos um produto ao pedido",
+      "warning"
+    );
+    return;
+  }
 
-    setLoading(true);
-    try {
-      // CORREÇÃO: Definir local de trabalho corretamente
-      const localTrabalhoFinal =
-        clienteSelecionado.local_trabalho ||
-        localTrabalhoManual ||
-        usuarioSelecionado.local_trabalho ||
-        "";
+  setLoading(true);
+  try {
+    const localTrabalhoFinal =
+      clienteSelecionado.local_trabalho ||
+      localTrabalhoManual ||
+      usuarioSelecionado.local_trabalho ||
+      "";
 
-      const pedidoData = {
-        cliente: clienteSelecionado,
-        itens: itensPedido,
-        total: calcularTotalComSaldoAnterior(),
-        observacoes,
-        condicaoPagamento,
-        clienteId: clienteSelecionado.id,
-        usuarioId: usuarioSelecionado.id,
-        localTrabalho: localTrabalhoFinal, // ← CORREÇÃO AQUI
-        condicaoPagamentoId:
-          condicaoPagamentoSelecionada?.condicaoId === "custom"
-            ? undefined
-            : condicaoPagamentoSelecionada?.condicaoId,
-        parcelas: condicaoPagamentoSelecionada?.parcelas || [],
-        pedidoAnterior: pedidoAnterior || undefined,
-        saldoPedidoAnterior: saldoPedidoAnterior,
-        valorProdutosNovos: calcularTotal(),
-      };
+    const pedidoData = {
+      cliente: clienteSelecionado,
+      itens: itensPedido,
+      total: calcularTotalComSaldoAnterior(),
+      observacoes,
+      condicaoPagamento,
+      clienteId: clienteSelecionado.id,
+      usuarioId: usuarioSelecionado.id,
+      localTrabalho: localTrabalhoFinal,
+      condicaoPagamentoId:
+        condicaoPagamentoSelecionada?.condicaoId === "custom"
+          ? undefined
+          : condicaoPagamentoSelecionada?.condicaoId,
+      parcelas: condicaoPagamentoSelecionada?.parcelas || [],
+      pedidoAnterior: pedidoAnterior || undefined,
+      saldoPedidoAnterior: saldoPedidoAnterior,
+      valorProdutosNovos: calcularTotal(),
+      naoBaixarEstoque: naoBaixarEstoque, // 👈 ADICIONE ESTA LINHA
+    };
 
-      await onSave(pedidoData);
+    await onSave(pedidoData);
 
-      // Limpar estado após salvar
-      setItensPedido([]);
-      setClienteSelecionado(null);
-      setCondicaoPagamentoSelecionada(null);
-      setCondicaoPagamento("À vista");
-      setObservacoes("");
-      setLocalTrabalho("");
-      setLocalTrabalhoManual(""); // ← LIMPAR MANUAL TAMBÉM
-      setPedidoAnterior(null);
-      setSaldoPedidoAnterior(0);
-      onClose();
-    } catch (error) {
-      console.error("Erro ao confirmar pedido:", error);
-      Swal.fire("Erro", "Não foi possível confirmar o pedido", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Limpar estado após salvar
+    setItensPedido([]);
+    setClienteSelecionado(null);
+    setCondicaoPagamentoSelecionada(null);
+    setCondicaoPagamento("À vista");
+    setObservacoes("");
+    setLocalTrabalho("");
+    setLocalTrabalhoManual("");
+    setPedidoAnterior(null);
+    setSaldoPedidoAnterior(0);
+    setNaoBaixarEstoque(false); // 👈 RESETAR A FLAG
+    onClose();
+  } catch (error) {
+    console.error("Erro ao confirmar pedido:", error);
+    Swal.fire("Erro", "Não foi possível confirmar o pedido", "error");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleCancelPreview = () => {
     setShowPreview(false);
@@ -1087,6 +1092,70 @@ export default function PrePedidoModal({
           )}
         </div>
 
+<div className="mb-6 p-6 bg-white rounded-xl shadow-md border border-gray-100">
+  <div className="flex items-center justify-between">
+    <div className="flex items-center gap-3">
+      <div className="relative">
+        <input
+          type="checkbox"
+          id="naoBaixarEstoque"
+          checked={naoBaixarEstoque}
+          onChange={(e) => setNaoBaixarEstoque(e.target.checked)}
+          className="w-5 h-5 text-amber-600 bg-gray-100 border-gray-300 rounded focus:ring-amber-500 focus:ring-2"
+        />
+      </div>
+      <label htmlFor="naoBaixarEstoque" className="flex items-center gap-2 cursor-pointer">
+        <svg
+          className="w-5 h-5 text-amber-600"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+          />
+        </svg>
+        <span className="font-medium text-gray-800">Não baixar estoque</span>
+      </label>
+    </div>
+    <div className="text-sm text-gray-500">
+      {naoBaixarEstoque ? (
+        <span className="flex items-center gap-1 text-amber-600">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          O estoque não será baixado
+        </span>
+      ) : (
+        <span className="flex items-center gap-1 text-green-600">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          O estoque será baixado automaticamente
+        </span>
+      )}
+    </div>
+  </div>
+  
+  {/* Informação adicional */}
+  {naoBaixarEstoque && (
+    <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
+      <p className="text-sm text-amber-800 flex items-start gap-2">
+        <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span>
+          <strong>Importante:</strong> Ao marcar esta opção, o estoque dos produtos 
+          <strong> NÃO será baixado</strong> ao confirmar este pré-pedido. 
+          Utilize esta opção para orçamentos, pré-reservas ou pedidos que ainda não estão confirmados.
+        </span>
+      </p>
+    </div>
+  )}
+</div>
         {/* Condição de Pagamento e Observações */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           {/* Condição de Pagamento */}

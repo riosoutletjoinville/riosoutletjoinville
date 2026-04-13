@@ -1,8 +1,11 @@
 // components/dashboard/ParcelasManagement.tsx
 "use client";
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { ModalPagamentoParcial } from "./ModalPagamentoParcial";
+import { ModalPagamentoTotal } from "./ModalPagamentoTotal";
+import { ModalNegociarParcela } from "./ModalNegociarParcela";
 import {
   Eye,
   CheckCircle,
@@ -16,6 +19,7 @@ import Swal from "sweetalert2";
 import VisualizarParcelasModal from "./VisualizarParcelasModal";
 
 export interface Cliente {
+  id?: string;
   razao_social?: string;
   nome_fantasia?: string;
   nome?: string;
@@ -33,11 +37,15 @@ export interface Parcela {
   pre_pedido_id: string;
   numero_parcela: number;
   valor_parcela: number;
+  valor_original?: number;
+  saldo_restante?: number;
   data_vencimento: string;
-  status: "pendente" | "pago" | "atrasado" | "cancelado";
+  status: "pendente" | "pago" | "atrasado" | "cancelado" | "parcial";
   data_pagamento?: string;
   valor_pago?: number;
   observacao?: string;
+  negociado?: boolean;
+  observacao_negociacao?: string;
   pre_pedido?: PrePedido;
 }
 
@@ -48,6 +56,21 @@ export interface ClienteResumo {
   totalAtrasado: number;
   totalPago: number;
   quantidadeParcelas: number;
+}
+
+// Props para o modal de visualização
+interface VisualizarParcelasModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  parcelas: Parcela[];
+  prePedidoId: string;
+  total: number;
+  cliente: Cliente | null;
+  onMarcarComoPago: (parcela: Parcela) => Promise<void>;
+  onPagamentoParcial?: (parcela: Parcela) => Promise<void>;
+  onNegociarParcela?: (parcela: Parcela) => Promise<void>;
+  onVerHistorico?: (parcela: Parcela) => Promise<void>;
+  onParcelasAtualizadas: () => void;
 }
 
 export default function ParcelasManagement() {
@@ -62,11 +85,19 @@ export default function ParcelasManagement() {
     Parcela[]
   >([]);
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(
-    null
+    null,
   );
   const [prePedidoId, setPrePedidoId] = useState<string>("");
   const [totalPedido, setTotalPedido] = useState<number>(0);
   const [filtroCliente, setFiltroCliente] = useState("");
+
+  const [modalPagamentoAberto, setModalPagamentoAberto] = useState(false);
+  const [parcelaSelecionada, setParcelaSelecionada] = useState<Parcela | null>(
+    null,
+  );
+  const [modalPagamentoTotalAberto, setModalPagamentoTotalAberto] =
+    useState(false);
+  const [modalNegociacaoAberto, setModalNegociacaoAberto] = useState(false);
 
   // Estados de paginação
   const [paginaAtual, setPaginaAtual] = useState(1);
@@ -85,7 +116,7 @@ export default function ParcelasManagement() {
   const clientesFiltrados = clientesResumo.filter((clienteResumo) =>
     getClienteNome(clienteResumo.cliente)
       .toLowerCase()
-      .includes(filtroCliente.toLowerCase())
+      .includes(filtroCliente.toLowerCase()),
   );
 
   // Calcular clientes paginados
@@ -93,7 +124,7 @@ export default function ParcelasManagement() {
   const indicePrimeiroCliente = indiceUltimoCliente - itensPorPagina;
   const clientesPaginados = clientesFiltrados.slice(
     indicePrimeiroCliente,
-    indiceUltimoCliente
+    indiceUltimoCliente,
   );
   const totalPaginas = Math.ceil(clientesFiltrados.length / itensPorPagina);
 
@@ -111,6 +142,245 @@ export default function ParcelasManagement() {
   const irParaPaginaAnterior = () => {
     if (paginaAtual > 1) {
       setPaginaAtual(paginaAtual - 1);
+    }
+  };
+
+  // Método para registrar pagamento parcial
+  const handlePagamentoParcial = async (parcela: Parcela) => {
+    setModalAberto(false);
+    setParcelaSelecionada(parcela);
+    setModalPagamentoAberto(true);
+  };
+
+  const handleConfirmarPagamentoParcial = async (data: {
+    valorPagamento: number;
+    formaPagamento: string;
+    dataPagamento: string;
+    observacao: string;
+  }) => {
+    if (!parcelaSelecionada) return;
+
+    try {
+      // Buscar dados atuais da parcela
+      const { data: parcelaAtual, error: fetchError } = await supabase
+        .from("pre_pedido_parcelas")
+        .select("valor_parcela, saldo_restante, valor_pago, status")
+        .eq("id", parcelaSelecionada.id)
+        .single();
+
+      if (fetchError) {
+        console.error("Erro ao buscar parcela:", fetchError);
+        throw fetchError;
+      }
+
+      const saldoAtual =
+        parcelaAtual.saldo_restante ?? parcelaAtual.valor_parcela;
+      const novoValorPago =
+        (parcelaAtual.valor_pago || 0) + data.valorPagamento;
+      const novoSaldoRestante = saldoAtual - data.valorPagamento;
+      const novoStatus = novoSaldoRestante <= 0 ? "pago" : "parcial";
+
+      // Registrar o pagamento na tabela parcela_pagamentos
+      const { error: pagamentoError } = await supabase
+        .from("parcela_pagamentos")
+        .insert([
+          {
+            parcela_id: parcelaSelecionada.id,
+            valor_pago: data.valorPagamento,
+            data_pagamento: data.dataPagamento,
+            forma_pagamento: data.formaPagamento,
+            observacao: data.observacao,
+            tipo_movimento: "parcial",
+          },
+        ]);
+
+      if (pagamentoError) {
+        console.error("Erro ao inserir pagamento:", pagamentoError);
+        throw pagamentoError;
+      }
+
+      // Atualizar a parcela
+      const { error: updateError } = await supabase
+        .from("pre_pedido_parcelas")
+        .update({
+          valor_pago: novoValorPago,
+          saldo_restante: Math.max(novoSaldoRestante, 0),
+          status: novoStatus,
+          data_pagamento: data.dataPagamento,
+        })
+        .eq("id", parcelaSelecionada.id);
+
+      if (updateError) {
+        console.error("Erro ao atualizar parcela:", updateError);
+        throw updateError;
+      }
+
+      // Registrar no financeiro
+      const { error: financeiroError } = await supabase
+        .from("financeiro")
+        .insert([
+          {
+            tipo: "entrada",
+            descricao: `Pagamento parcial - Parcela ${parcelaSelecionada.numero_parcela} do pedido ${parcelaSelecionada.pre_pedido_id}`,
+            valor: data.valorPagamento,
+            categoria: "recebimentos",
+            data_movimento: data.dataPagamento,
+          },
+        ]);
+
+      if (financeiroError) {
+        console.error("Erro ao registrar no financeiro:", financeiroError);
+        throw financeiroError;
+      }
+
+      // Mostrar mensagem de sucesso
+      await Swal.fire({
+        icon: "success",
+        title: "Sucesso!",
+        text: `Pagamento parcial de ${formatarMoeda(data.valorPagamento)} registrado com sucesso.`,
+        timer: 2000,
+        showConfirmButton: false,
+      });
+
+      // Recarregar os dados
+      await loadParcelas();
+      setModalAberto(false);
+    } catch (error) {
+      console.error("Erro detalhado ao registrar pagamento:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Erro",
+        text: `Não foi possível registrar o pagamento: ${error instanceof Error ? error.message : "Erro desconhecido"}`,
+      });
+      throw error;
+    }
+  };
+
+  // Método para negociar parcela
+  const handleNegociarParcela = async (parcela: Parcela) => {
+    setModalAberto(false);
+    setParcelaSelecionada(parcela);
+    setModalNegociacaoAberto(true);
+  };
+
+  const handleConfirmarNegociacao = async (data: {
+    valorNegociado: number;
+    novoVencimento: string;
+    observacao: string;
+  }) => {
+    if (!parcelaSelecionada) return;
+
+    try {
+      const desconto = parcelaSelecionada.valor_parcela - data.valorNegociado;
+
+      // Registrar negociação
+      const { error: negociacaoError } = await supabase
+        .from("parcela_negociacoes")
+        .insert([
+          {
+            parcela_id: parcelaSelecionada.id,
+            valor_original: parcelaSelecionada.valor_parcela,
+            valor_negociado: data.valorNegociado,
+            desconto_concedido: desconto,
+            novo_vencimento: data.novoVencimento || null,
+            observacao: data.observacao,
+            status: "ativo",
+          },
+        ]);
+
+      if (negociacaoError) throw negociacaoError;
+
+      // Atualizar a parcela
+      const updateData: any = {
+        valor_original: parcelaSelecionada.valor_parcela,
+        valor_parcela: data.valorNegociado,
+        saldo_restante: data.valorNegociado,
+        negociado: true,
+        observacao_negociacao: data.observacao,
+      };
+
+      if (data.novoVencimento) {
+        updateData.data_vencimento = data.novoVencimento;
+      }
+
+      const { error: updateError } = await supabase
+        .from("pre_pedido_parcelas")
+        .update(updateData)
+        .eq("id", parcelaSelecionada.id);
+
+      if (updateError) throw updateError;
+
+      Swal.fire(
+        "Negociação Registrada!",
+        `Desconto concedido: ${formatarMoeda(desconto)}\nNovo valor: ${formatarMoeda(data.valorNegociado)}`,
+        "success",
+      );
+
+      await loadParcelas();
+    } catch (error) {
+      console.error("Erro ao registrar negociação:", error);
+      Swal.fire("Erro", "Não foi possível registrar a negociação.", "error");
+      throw error;
+    }
+  };
+
+  // Método para visualizar histórico de pagamentos
+  const verHistoricoPagamentos = async (parcela: Parcela) => {
+    try {
+      const { data: pagamentos, error } = await supabase
+        .from("parcela_pagamentos")
+        .select("*")
+        .eq("parcela_id", parcela.id)
+        .order("data_pagamento", { ascending: false });
+
+      if (error) throw error;
+
+      const totalPago =
+        pagamentos?.reduce((sum, p) => sum + p.valor_pago, 0) || 0;
+      const saldoRestante = parcela.valor_parcela - totalPago;
+
+      let htmlContent = `
+      <div class="text-left">
+        <p class="font-semibold mb-2">Resumo da Parcela ${parcela.numero_parcela}</p>
+        <p>Valor Original: R$ ${parcela.valor_parcela.toFixed(2)}</p>
+        <p>Total Pago: R$ ${totalPago.toFixed(2)}</p>
+        <p>Saldo Restante: R$ ${saldoRestante.toFixed(2)}</p>
+    `;
+
+      if (pagamentos && pagamentos.length > 0) {
+        htmlContent += `
+        <hr class="my-3">
+        <p class="font-semibold mb-2">Histórico de Pagamentos:</p>
+        <div class="space-y-2 max-h-60 overflow-y-auto">
+      `;
+
+        pagamentos.forEach((pag) => {
+          htmlContent += `
+          <div class="border p-2 rounded text-sm">
+            <p><strong>Data:</strong> ${new Date(pag.data_pagamento).toLocaleDateString("pt-BR")}</p>
+            <p><strong>Valor:</strong> R$ ${pag.valor_pago.toFixed(2)}</p>
+            <p><strong>Forma:</strong> ${pag.forma_pagamento}</p>
+            ${pag.observacao ? `<p><strong>Obs:</strong> ${pag.observacao}</p>` : ""}
+          </div>
+        `;
+        });
+
+        htmlContent += `</div>`;
+      } else {
+        htmlContent += `<p class="text-gray-500 mt-2">Nenhum pagamento registrado</p>`;
+      }
+
+      htmlContent += `</div>`;
+
+      await Swal.fire({
+        title: `Histórico - Parcela ${parcela.numero_parcela}`,
+        html: htmlContent,
+        width: 500,
+        confirmButtonText: "Fechar",
+      });
+    } catch (error) {
+      console.error("Erro ao carregar histórico:", error);
+      Swal.fire("Erro", "Não foi possível carregar o histórico.", "error");
     }
   };
 
@@ -140,11 +410,12 @@ export default function ParcelasManagement() {
       clienteResumo.quantidadeParcelas++;
 
       // Calcular totais
-      if (parcela.status === "pendente") {
+      if (parcela.status === "pendente" || parcela.status === "parcial") {
+        const saldo = parcela.saldo_restante ?? parcela.valor_parcela;
         if (new Date(parcela.data_vencimento) < new Date()) {
-          clienteResumo.totalAtrasado += parcela.valor_parcela;
+          clienteResumo.totalAtrasado += saldo;
         } else {
-          clienteResumo.totalPendente += parcela.valor_parcela;
+          clienteResumo.totalPendente += saldo;
         }
       } else if (parcela.status === "pago") {
         clienteResumo.totalPago += parcela.valor_pago || parcela.valor_parcela;
@@ -155,7 +426,6 @@ export default function ParcelasManagement() {
   }, [parcelas]);
 
   // Função para carregar parcelas
-  
   const loadParcelas = useCallback(async () => {
     try {
       setLoading(true);
@@ -167,6 +437,7 @@ export default function ParcelasManagement() {
           pre_pedido:pre_pedidos(
             id,
             cliente:clientes(
+              id,
               razao_social,
               nome_fantasia,
               nome,
@@ -174,17 +445,18 @@ export default function ParcelasManagement() {
             ),
             total
           )
-        `
+        `,
         )
         .order("data_vencimento", { ascending: true });
 
-      // CORREÇÃO: Aplicar filtros corretamente
+      // Aplicar filtros corretamente
       if (filtroStatus !== "todos") {
         if (filtroStatus === "atrasadas") {
-          // Filtrar parcelas pendentes com data de vencimento passada
           query = query
             .eq("status", "pendente")
-            .lt("data_vencimento", new Date().toISOString().split('T')[0]);
+            .lt("data_vencimento", new Date().toISOString().split("T")[0]);
+        } else if (filtroStatus === "parcial") {
+          query = query.eq("status", "parcial");
         } else {
           query = query.eq("status", filtroStatus);
         }
@@ -234,78 +506,102 @@ export default function ParcelasManagement() {
   };
 
   const handleMarcarComoPago = async (parcela: Parcela) => {
+    setModalAberto(false);
+    setParcelaSelecionada(parcela);
+    setModalPagamentoTotalAberto(true);
+  };
+
+  // Adicione a função de confirmação do pagamento total
+  const handleConfirmarPagamentoTotal = async (data: {
+    valorPago: number;
+    dataPagamento: string;
+    formaPagamento: string;
+  }) => {
+    if (!parcelaSelecionada) return;
+
     try {
-      const { value: formValues } = await Swal.fire({
-        title: "Marcar Parcela como Paga",
-        html: `
-          <div class="text-left">
-            <label class="block text-sm font-medium text-gray-700 mb-2">Valor Pago</label>
-            <input 
-              type="number" 
-              id="valorPago" 
-              value="${parcela.valor_parcela}" 
-              step="0.01"
-              class="w-full border border-gray-300 rounded-md px-3 py-2 mb-3"
-            >
-            <label class="block text-sm font-medium text-gray-700 mb-2">Data do Pagamento</label>
-            <input 
-              type="date" 
-              id="dataPagamento" 
-              value="${new Date().toISOString().split("T")[0]}" 
-              class="w-full border border-gray-300 rounded-md px-3 py-2"
-            >
-          </div>
-        `,
-        showCancelButton: true,
-        confirmButtonText: "Confirmar Pagamento",
-        cancelButtonText: "Cancelar",
-        preConfirm: () => {
-          const valorPago = parseFloat(
-            (document.getElementById("valorPago") as HTMLInputElement).value
-          );
-          const dataPagamento = (
-            document.getElementById("dataPagamento") as HTMLInputElement
-          ).value;
+      // Buscar dados atuais da parcela
+      const { data: parcelaAtual, error: fetchError } = await supabase
+        .from("pre_pedido_parcelas")
+        .select("valor_parcela, saldo_restante, valor_pago, status")
+        .eq("id", parcelaSelecionada.id)
+        .single();
 
-          if (!valorPago || valorPago <= 0) {
-            Swal.showValidationMessage("Por favor, insira um valor válido");
-            return false;
-          }
+      if (fetchError) throw fetchError;
 
-          if (!dataPagamento) {
-            Swal.showValidationMessage(
-              "Por favor, insira uma data de pagamento"
-            );
-            return false;
-          }
+      const valorPagoTotal = Math.min(
+        data.valorPago,
+        parcelaAtual.valor_parcela,
+      );
+      const isPagamentoTotal = valorPagoTotal >= parcelaAtual.valor_parcela;
+      const novoValorPago = (parcelaAtual.valor_pago || 0) + valorPagoTotal;
+      const novoSaldoRestante = parcelaAtual.valor_parcela - novoValorPago;
+      const novoStatus = isPagamentoTotal
+        ? "pago"
+        : novoSaldoRestante > 0
+          ? "parcial"
+          : "pago";
 
-          return { valorPago, dataPagamento };
-        },
-      });
+      // Registrar pagamento no histórico
+      const { error: pagamentoError } = await supabase
+        .from("parcela_pagamentos")
+        .insert([
+          {
+            parcela_id: parcelaSelecionada.id,
+            valor_pago: valorPagoTotal,
+            data_pagamento: data.dataPagamento,
+            forma_pagamento: data.formaPagamento,
+            tipo_movimento: isPagamentoTotal ? "total" : "parcial",
+          },
+        ]);
 
-      if (!formValues) return;
+      if (pagamentoError) throw pagamentoError;
 
-      const { error } = await supabase
+      // Atualizar a parcela
+      const { error: updateError } = await supabase
         .from("pre_pedido_parcelas")
         .update({
-          status: "pago",
-          valor_pago: formValues.valorPago,
-          data_pagamento: formValues.dataPagamento,
+          status: novoStatus,
+          valor_pago: novoValorPago,
+          data_pagamento: data.dataPagamento,
+          saldo_restante: Math.max(novoSaldoRestante, 0),
         })
-        .eq("id", parcela.id);
+        .eq("id", parcelaSelecionada.id);
 
-      if (error) throw error;
+      if (updateError) throw updateError;
 
-      Swal.fire("Sucesso!", "Parcela marcada como paga.", "success");
-      loadParcelas();
-      setModalAberto(false);
+      // Registrar no financeiro
+      const { error: financeiroError } = await supabase
+        .from("financeiro")
+        .insert([
+          {
+            tipo: "entrada",
+            descricao: `Pagamento - Parcela ${parcelaSelecionada.numero_parcela} do pedido ${parcelaSelecionada.pre_pedido_id}`,
+            valor: valorPagoTotal,
+            categoria: "recebimentos",
+            data_movimento: data.dataPagamento,
+          },
+        ]);
+
+      if (financeiroError) throw financeiroError;
+
+      await Swal.fire({
+        icon: "success",
+        title: "Sucesso!",
+        text: `Pagamento de ${formatarMoeda(valorPagoTotal)} registrado com sucesso.`,
+        timer: 2000,
+        showConfirmButton: false,
+      });
+
+      await loadParcelas();
     } catch (error) {
-      console.error("Erro ao marcar parcela como paga:", error);
-      Swal.fire(
-        "Erro",
-        "Não foi possível marcar a parcela como paga.",
-        "error"
-      );
+      console.error("Erro ao registrar pagamento:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Erro",
+        text: "Não foi possível registrar o pagamento.",
+      });
+      throw error;
     }
   };
 
@@ -314,25 +610,29 @@ export default function ParcelasManagement() {
     loadParcelas();
   };
 
-const formatarMoeda = (valor: number): string => {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(valor);
-};
+  const formatarMoeda = (valor: number): string => {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(valor);
+  };
+
   // Totais gerais (para os cards de resumo)
   const totalPendente = parcelas
     .filter(
       (p) =>
-        p.status === "pendente" && new Date(p.data_vencimento) >= new Date()
+        (p.status === "pendente" || p.status === "parcial") &&
+        new Date(p.data_vencimento) >= new Date(),
     )
-    .reduce((sum, p) => sum + p.valor_parcela, 0);
+    .reduce((sum, p) => sum + (p.saldo_restante ?? p.valor_parcela), 0);
 
   const totalAtrasado = parcelas
     .filter(
-      (p) => p.status === "pendente" && new Date(p.data_vencimento) < new Date()
+      (p) =>
+        (p.status === "pendente" || p.status === "parcial") &&
+        new Date(p.data_vencimento) < new Date(),
     )
-    .reduce((sum, p) => sum + p.valor_parcela, 0);
+    .reduce((sum, p) => sum + (p.saldo_restante ?? p.valor_parcela), 0);
 
   const totalPago = parcelas
     .filter((p) => p.status === "pago")
@@ -346,7 +646,9 @@ const formatarMoeda = (valor: number): string => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Gestão de Parcelas</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            Gestão de Parcelas
+          </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-2">
             Acompanhe e gerencie as parcelas dos seus clientes
           </p>
@@ -358,7 +660,9 @@ const formatarMoeda = (valor: number): string => {
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border-l-4 border-blue-500">
           <div className="flex justify-between items-center">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Clientes</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Clientes
+              </p>
               <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
                 {clientesResumo.length}
               </p>
@@ -372,13 +676,18 @@ const formatarMoeda = (valor: number): string => {
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border-l-4 border-yellow-500">
           <div className="flex justify-between items-center">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Pendentes</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Pendentes
+              </p>
               <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
                 {formatarMoeda(totalPendente)}
               </p>
             </div>
             <div className="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-full">
-              <Calendar className="text-yellow-600 dark:text-yellow-400" size={24} />
+              <Calendar
+                className="text-yellow-600 dark:text-yellow-400"
+                size={24}
+              />
             </div>
           </div>
         </div>
@@ -386,7 +695,9 @@ const formatarMoeda = (valor: number): string => {
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border-l-4 border-red-500">
           <div className="flex justify-between items-center">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Atrasadas</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Atrasadas
+              </p>
               <p className="text-2xl font-bold text-red-600 dark:text-red-400">
                 {formatarMoeda(totalAtrasado)}
               </p>
@@ -406,7 +717,10 @@ const formatarMoeda = (valor: number): string => {
               </p>
             </div>
             <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full">
-              <CheckCircle className="text-green-600 dark:text-green-400" size={24} />
+              <CheckCircle
+                className="text-green-600 dark:text-green-400"
+                size={24}
+              />
             </div>
           </div>
         </div>
@@ -426,6 +740,7 @@ const formatarMoeda = (valor: number): string => {
             >
               <option value="todos">Todos</option>
               <option value="pendente">Pendentes</option>
+              <option value="parcial">Pagamento Parcial</option>
               <option value="atrasadas">Atrasadas</option>
               <option value="pago">Pagas</option>
               <option value="cancelado">Canceladas</option>
@@ -541,20 +856,20 @@ const formatarMoeda = (valor: number): string => {
                   {clienteResumo.quantidadeParcelas}
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-900">
-                  R$ {clienteResumo.totalPendente.toFixed(2)}
+                  {formatarMoeda(clienteResumo.totalPendente)}
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-900">
-                  R$ {clienteResumo.totalAtrasado.toFixed(2)}
+                  {formatarMoeda(clienteResumo.totalAtrasado)}
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-900">
-                  R$ {clienteResumo.totalPago.toFixed(2)}
+                  {formatarMoeda(clienteResumo.totalPago)}
                 </td>
                 <td className="px-6 py-4 text-sm font-medium">
                   <button
                     onClick={() =>
                       abrirModalParcelas(
                         clienteResumo.cliente,
-                        clienteResumo.parcelas
+                        clienteResumo.parcelas,
                       )
                     }
                     className="flex items-center px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
@@ -638,7 +953,47 @@ const formatarMoeda = (valor: number): string => {
           </div>
         )}
       </div>
+      {/* Modal de Pagamento Total */}
+      {parcelaSelecionada && (
+        <ModalPagamentoTotal
+          isOpen={modalPagamentoTotalAberto}
+          onClose={() => {
+            setModalPagamentoTotalAberto(false);
+            setParcelaSelecionada(null);
+            setModalAberto(true);
+          }}
+          parcela={parcelaSelecionada}
+          onConfirm={handleConfirmarPagamentoTotal}
+        />
+      )}
 
+      {/* Modal de Negociação */}
+      {parcelaSelecionada && (
+        <ModalNegociarParcela
+          isOpen={modalNegociacaoAberto}
+          onClose={() => {
+            setModalNegociacaoAberto(false);
+            setParcelaSelecionada(null);
+            setModalAberto(true);
+          }}
+          parcela={parcelaSelecionada}
+          onConfirm={handleConfirmarNegociacao}
+        />
+      )}
+
+      {/* Modal de Pagamento Parcial (já existente) */}
+      {parcelaSelecionada && (
+        <ModalPagamentoParcial
+          isOpen={modalPagamentoAberto}
+          onClose={() => {
+            setModalPagamentoAberto(false);
+            setParcelaSelecionada(null);
+            setModalAberto(true);
+          }}
+          parcela={parcelaSelecionada}
+          onConfirm={handleConfirmarPagamentoParcial}
+        />
+      )}
       {/* Modal de Visualização de Parcelas */}
       <VisualizarParcelasModal
         key={prePedidoId}
@@ -649,6 +1004,9 @@ const formatarMoeda = (valor: number): string => {
         total={totalPedido}
         cliente={clienteSelecionado}
         onMarcarComoPago={handleMarcarComoPago}
+        onPagamentoParcial={handlePagamentoParcial}
+        onNegociarParcela={handleNegociarParcela}
+        onVerHistorico={verHistoricoPagamentos}
         onParcelasAtualizadas={handleParcelasAtualizadas}
       />
     </div>

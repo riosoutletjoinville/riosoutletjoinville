@@ -4,22 +4,28 @@ import { useRef } from "react";
 import { Download, Printer, X } from "lucide-react";
 
 interface Cliente {
+  id?: string;
   razao_social?: string;
   nome_fantasia?: string;
   nome?: string;
   sobrenome?: string;
 }
 
+// Sincronizar com a interface do ParcelasManagement
 interface Parcela {
   id: string;
   pre_pedido_id: string;
   numero_parcela: number;
   valor_parcela: number;
+  valor_original?: number;
+  saldo_restante?: number;
   data_vencimento: string;
-  status: "pendente" | "pago" | "atrasado" | "cancelado";
+  status: "pendente" | "pago" | "atrasado" | "cancelado" | "parcial";
   data_pagamento?: string;
   valor_pago?: number;
   observacao?: string;
+  negociado?: boolean;
+  observacao_negociacao?: string;
 }
 
 interface ComprovantePagamentoProps {
@@ -57,6 +63,38 @@ export default function ComprovantePagamento({
       style: "currency",
       currency: "BRL",
     }).format(valor);
+  };
+
+  const getStatusText = (status: string): string => {
+    switch (status) {
+      case "pago":
+        return "PAGO";
+      case "parcial":
+        return "PAGAMENTO PARCIAL";
+      case "pendente":
+        return "PENDENTE";
+      case "atrasado":
+        return "ATRASADO";
+      case "cancelado":
+        return "CANCELADO";
+      default:
+        return status.toUpperCase();
+    }
+  };
+
+  const getStatusColor = (status: string): string => {
+    switch (status) {
+      case "pago":
+        return "text-green-600";
+      case "parcial":
+        return "text-blue-600";
+      case "pendente":
+        return "text-yellow-600";
+      case "atrasado":
+        return "text-red-600";
+      default:
+        return "text-gray-600";
+    }
   };
 
   const handleImprimir = () => {
@@ -117,6 +155,12 @@ export default function ComprovantePagamento({
               margin-top: 20px; 
               font-size: 12px;
             }
+            .saldo-restante {
+              margin-top: 10px;
+              padding-top: 10px;
+              border-top: 1px dashed #000;
+              font-weight: bold;
+            }
             @media print {
               body { margin: 0; }
               .no-print { display: none; }
@@ -138,13 +182,19 @@ export default function ComprovantePagamento({
     const comprovanteContent = comprovanteRef.current;
     if (!comprovanteContent) return;
 
-    const originalContent = comprovanteContent.innerHTML;
-    
+    // Calcular valores
+    const valorPago = parcela.valor_pago || parcela.valor_parcela;
+    const saldoRestante = parcela.saldo_restante !== undefined && parcela.saldo_restante > 0 
+      ? parcela.saldo_restante 
+      : (parcela.status === "parcial" ? parcela.valor_parcela - valorPago : 0);
+    const isParcial = parcela.status === "parcial" || (saldoRestante > 0 && valorPago < parcela.valor_parcela);
+
     // Criar conteúdo para PDF/impressão
     const printContent = `
       <div class="comprovante">
         <div class="header">
           <h1>COMPROVANTE DE PAGAMENTO</h1>
+          ${isParcial ? '<p style="color: #2563eb; font-weight: bold; margin-top: 5px;">* Pagamento Parcial *</p>' : ''}
         </div>
         
         <div class="info-section">
@@ -169,8 +219,14 @@ export default function ComprovantePagamento({
           </div>
           <div class="info-row">
             <span class="info-label">Valor Pago:</span>
-            <span><strong>${formatarMoeda(parcela.valor_pago || parcela.valor_parcela)}</strong></span>
+            <span><strong>${formatarMoeda(valorPago)}</strong></span>
           </div>
+          ${isParcial && saldoRestante > 0 ? `
+          <div class="info-row">
+            <span class="info-label">Saldo Restante:</span>
+            <span><strong style="color: #dc2626;">${formatarMoeda(saldoRestante)}</strong></span>
+          </div>
+          ` : ''}
           <div class="info-row">
             <span class="info-label">Data de Vencimento:</span>
             <span>${formatarData(parcela.data_vencimento)}</span>
@@ -184,7 +240,7 @@ export default function ComprovantePagamento({
         <div class="info-section">
           <div class="info-row">
             <span class="info-label">Status:</span>
-            <span><strong>PAGO</strong></span>
+            <span><strong style="color: ${isParcial ? '#2563eb' : '#16a34a'};">${getStatusText(parcela.status)}</strong></span>
           </div>
           ${parcela.observacao ? `
           <div class="info-row">
@@ -192,7 +248,21 @@ export default function ComprovantePagamento({
             <span>${parcela.observacao}</span>
           </div>
           ` : ''}
+          ${parcela.observacao_negociacao ? `
+          <div class="info-row">
+            <span class="info-label">Negociação:</span>
+            <span>${parcela.observacao_negociacao}</span>
+          </div>
+          ` : ''}
         </div>
+
+        ${isParcial ? `
+        <div class="saldo-restante">
+          <p style="text-align: center; color: #2563eb;">
+            ⚠️ Pagamento Parcial - Saldo remanescente: ${formatarMoeda(saldoRestante)}
+          </p>
+        </div>
+        ` : ''}
 
         <div class="assinatura">
           <p>___________________________________</p>
@@ -260,6 +330,12 @@ export default function ComprovantePagamento({
               margin-top: 20px; 
               font-size: 12px;
             }
+            .saldo-restante {
+              margin-top: 10px;
+              padding-top: 10px;
+              border-top: 1px dashed #000;
+              font-weight: bold;
+            }
             @media print {
               body { margin: 0; }
             }
@@ -275,6 +351,13 @@ export default function ComprovantePagamento({
     printWindow.focus();
     printWindow.print();
   };
+
+  // Calcular valores para exibição
+  const valorPago = parcela.valor_pago || parcela.valor_parcela;
+  const saldoRestante = parcela.saldo_restante !== undefined && parcela.saldo_restante > 0 
+    ? parcela.saldo_restante 
+    : (parcela.status === "parcial" ? parcela.valor_parcela - valorPago : 0);
+  const isParcial = parcela.status === "parcial" || (saldoRestante > 0 && valorPago < parcela.valor_parcela);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -294,6 +377,9 @@ export default function ComprovantePagamento({
           {/* Cabeçalho */}
           <div className="text-center border-b border-gray-800 pb-4 mb-4">
             <h1 className="text-2xl font-bold uppercase">Comprovante de Pagamento</h1>
+            {isParcial && (
+              <p className="text-blue-600 font-bold mt-2">* Pagamento Parcial *</p>
+            )}
           </div>
 
           {/* Informações do Cliente e Pedido */}
@@ -320,10 +406,18 @@ export default function ComprovantePagamento({
             </div>
             <div className="flex justify-between mb-2">
               <span className="font-semibold">Valor Pago:</span>
-              <span className="font-bold text-green-600">
-                {formatarMoeda(parcela.valor_pago || parcela.valor_parcela)}
+              <span className={`font-bold ${isParcial ? 'text-blue-600' : 'text-green-600'}`}>
+                {formatarMoeda(valorPago)}
               </span>
             </div>
+            {isParcial && saldoRestante > 0 && (
+              <div className="flex justify-between mb-2">
+                <span className="font-semibold">Saldo Restante:</span>
+                <span className="font-bold text-red-600">
+                  {formatarMoeda(saldoRestante)}
+                </span>
+              </div>
+            )}
             <div className="flex justify-between mb-2">
               <span className="font-semibold">Data de Vencimento:</span>
               <span>{formatarData(parcela.data_vencimento)}</span>
@@ -340,7 +434,9 @@ export default function ComprovantePagamento({
           <div className="mb-4">
             <div className="flex justify-between mb-2">
               <span className="font-semibold">Status:</span>
-              <span className="font-bold text-green-600">PAGO</span>
+              <span className={`font-bold ${getStatusColor(parcela.status)}`}>
+                {getStatusText(parcela.status)}
+              </span>
             </div>
             {parcela.observacao && (
               <div className="flex justify-between mb-2">
@@ -348,7 +444,22 @@ export default function ComprovantePagamento({
                 <span className="text-right max-w-xs">{parcela.observacao}</span>
               </div>
             )}
+            {parcela.observacao_negociacao && (
+              <div className="flex justify-between mb-2">
+                <span className="font-semibold">Negociação:</span>
+                <span className="text-right max-w-xs text-orange-600">{parcela.observacao_negociacao}</span>
+              </div>
+            )}
           </div>
+
+          {/* Aviso de saldo restante para pagamento parcial */}
+          {isParcial && saldoRestante > 0 && (
+            <div className="mt-4 pt-4 border-t border-dashed border-gray-800 text-center">
+              <p className="text-blue-600 font-bold">
+                ⚠️ Pagamento Parcial - Saldo remanescente: {formatarMoeda(saldoRestante)}
+              </p>
+            </div>
+          )}
 
           {/* Assinatura */}
           <div className="mt-8 pt-4 border-t border-gray-800 text-center">
@@ -369,6 +480,13 @@ export default function ComprovantePagamento({
             className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
           >
             Fechar
+          </button>
+          <button
+            onClick={handleImprimir}
+            className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+          >
+            <Printer size={16} className="mr-2" />
+            Imprimir
           </button>
           <button
             onClick={handleDownload}

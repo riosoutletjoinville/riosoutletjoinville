@@ -9,13 +9,17 @@ import {
   Filter,
   FileText,
   Edit,
+  DollarSign,
+  Clock,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import ComprovantePagamento from "./ComprovantePagamento";
 import { supabase } from "@/lib/supabase";
 import Swal from "sweetalert2";
 
+// Sincronizar com as interfaces do ParcelasManagement
 interface Cliente {
+  id?: string;
   razao_social?: string;
   nome_fantasia?: string;
   nome?: string;
@@ -27,11 +31,15 @@ interface Parcela {
   pre_pedido_id: string;
   numero_parcela: number;
   valor_parcela: number;
+  valor_original?: number;
+  saldo_restante?: number;
   data_vencimento: string;
-  status: "pendente" | "pago" | "atrasado" | "cancelado";
+  status: "pendente" | "pago" | "atrasado" | "cancelado" | "parcial";
   data_pagamento?: string;
   valor_pago?: number;
   observacao?: string;
+  negociado?: boolean;
+  observacao_negociacao?: string;
 }
 
 interface VisualizarParcelasModalProps {
@@ -41,8 +49,11 @@ interface VisualizarParcelasModalProps {
   prePedidoId: string;
   total: number;
   cliente: Cliente | null;
-  onMarcarComoPago: (parcela: Parcela) => void;
-  onParcelasAtualizadas?: () => void; // prop para atualizar a lista principal
+  onMarcarComoPago: (parcela: Parcela) => Promise<void>;
+  onPagamentoParcial?: (parcela: Parcela) => Promise<void>;
+  onNegociarParcela?: (parcela: Parcela) => Promise<void>;
+  onVerHistorico?: (parcela: Parcela) => Promise<void>;
+  onParcelasAtualizadas?: () => void;
 }
 
 export default function VisualizarParcelasModal({
@@ -53,6 +64,9 @@ export default function VisualizarParcelasModal({
   total,
   cliente,
   onMarcarComoPago,
+  onPagamentoParcial,
+  onNegociarParcela,
+  onVerHistorico,
   onParcelasAtualizadas,
 }: VisualizarParcelasModalProps) {
   // Estados para paginação
@@ -94,7 +108,7 @@ export default function VisualizarParcelasModal({
 
     if (filtroStatus === "atrasadas") {
       return (
-        parcela.status === "pendente" &&
+        (parcela.status === "pendente" || parcela.status === "parcial") &&
         new Date(parcela.data_vencimento) < new Date()
       );
     }
@@ -102,7 +116,7 @@ export default function VisualizarParcelasModal({
     return parcela.status === filtroStatus;
   });
 
-  // Cálculos para paginação (agora usando parcelasFiltradas)
+  // Cálculos para paginação
   const indiceUltimoItem = paginaAtual * itensPorPagina;
   const indicePrimeiroItem = indiceUltimoItem - itensPorPagina;
   const parcelasPaginadas = parcelasFiltradas.slice(
@@ -144,7 +158,6 @@ export default function VisualizarParcelasModal({
 
       if (error) throw error;
 
-      // ATUALIZAÇÃO DIRETA - sem complicação
       const novasParcelas = [...parcelas];
       const parcelaIndex = novasParcelas.findIndex((p) => p.id === parcelaId);
       if (parcelaIndex !== -1) {
@@ -168,27 +181,18 @@ export default function VisualizarParcelasModal({
   };
 
   const TimezoneData = (dataString: string): string => {
-    // Cria uma data no timezone local a partir da string
     const data = new Date(dataString);
-
-    // Ajusta para compensar o offset do timezone
-    const timezoneOffset = data.getTimezoneOffset() * 60000; // offset em milissegundos
+    const timezoneOffset = data.getTimezoneOffset() * 60000;
     const dataAjustada = new Date(data.getTime() + timezoneOffset);
-
-    // Retorna no formato YYYY-MM-DD
     return dataAjustada.toISOString().split("T")[0];
   };
 
-  // Iniciar edição de data
   const iniciarEdicaoData = (parcela: Parcela) => {
     setEditandoData(parcela.id);
-
-    // Usar a função de correção de timezone
     const dataCorrigida = TimezoneData(parcela.data_vencimento);
     setNovaData(dataCorrigida);
   };
 
-  // Cancelar edição de data
   const cancelarEdicaoData = () => {
     setEditandoData(null);
     setNovaData("");
@@ -202,52 +206,77 @@ export default function VisualizarParcelasModal({
         return "bg-red-100 text-red-800";
       case "cancelado":
         return "bg-gray-100 text-gray-800";
+      case "parcial":
+        return "bg-blue-100 text-blue-800";
       default:
         return "bg-yellow-100 text-yellow-800";
     }
   };
 
-  const formatStatus = (status: string, dataVencimento: string) => {
-    if (status === "pendente" && new Date(dataVencimento) < new Date()) {
-      return "Atrasada";
+  const getStatusBadge = (parcela: Parcela) => {
+    if (parcela.status === "parcial") {
+      return (
+        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+          <DollarSign size={12} className="mr-1" />
+          Parcial ({((parcela.valor_pago || 0) / parcela.valor_parcela * 100).toFixed(0)}%)
+        </span>
+      );
+    }
+    
+    if (parcela.status === "pendente" && new Date(parcela.data_vencimento) < new Date()) {
+      return (
+        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+          <Clock size={12} className="mr-1" />
+          Atrasada
+        </span>
+      );
     }
 
-    const statusMap: { [key: string]: string } = {
-      pendente: "Pendente",
-      pago: "Pago",
-      atrasado: "Atrasado",
-      cancelado: "Cancelado",
+    const statusMap: { [key: string]: { label: string; icon: any; color: string } } = {
+      pendente: { label: "Pendente", icon: Clock, color: "bg-yellow-100 text-yellow-800" },
+      pago: { label: "Pago", icon: CheckCircle, color: "bg-green-100 text-green-800" },
+      cancelado: { label: "Cancelado", icon: X, color: "bg-gray-100 text-gray-800" },
     };
-    return statusMap[status] || status;
+    
+    const config = statusMap[parcela.status] || statusMap.pendente;
+    const Icon = config.icon;
+    
+    return (
+      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>
+        <Icon size={12} className="mr-1" />
+        {config.label}
+      </span>
+    );
   };
 
   const getClienteNome = (cliente: Cliente | null) => {
     if (!cliente) return "Cliente não informado";
-
     if (cliente.razao_social) return cliente.razao_social;
     if (cliente.nome_fantasia) return cliente.nome_fantasia;
     return `${cliente.nome || ""} ${cliente.sobrenome || ""}`.trim();
   };
 
-  // Calcular totais para o modal (usando parcelasFiltradas)
+  // Calcular totais
   const totalPendente = parcelasFiltradas
     .filter(
       (p) =>
-        p.status === "pendente" && new Date(p.data_vencimento) >= new Date()
+        (p.status === "pendente" || p.status === "parcial") &&
+        new Date(p.data_vencimento) >= new Date()
     )
-    .reduce((sum, p) => sum + p.valor_parcela, 0);
+    .reduce((sum, p) => sum + (p.saldo_restante ?? p.valor_parcela), 0);
 
   const totalAtrasado = parcelasFiltradas
     .filter(
-      (p) => p.status === "pendente" && new Date(p.data_vencimento) < new Date()
+      (p) =>
+        (p.status === "pendente" || p.status === "parcial") &&
+        new Date(p.data_vencimento) < new Date()
     )
-    .reduce((sum, p) => sum + p.valor_parcela, 0);
+    .reduce((sum, p) => sum + (p.saldo_restante ?? p.valor_parcela), 0);
 
   const totalPago = parcelasFiltradas
     .filter((p) => p.status === "pago")
     .reduce((sum, p) => sum + (p.valor_pago || p.valor_parcela), 0);
 
-  // Função para abrir comprovante
   const abrirComprovante = (parcela: Parcela) => {
     setParcelaSelecionada(parcela);
     setComprovanteAberto(true);
@@ -326,6 +355,7 @@ export default function VisualizarParcelasModal({
                   >
                     <option value="todos">Todos</option>
                     <option value="pendente">Pendentes</option>
+                    <option value="parcial">Pagamento Parcial</option>
                     <option value="atrasadas">Atrasadas</option>
                     <option value="pago">Pagas</option>
                     <option value="cancelado">Canceladas</option>
@@ -400,7 +430,7 @@ export default function VisualizarParcelasModal({
                     key={parcela.id}
                     className={
                       new Date(parcela.data_vencimento) < new Date() &&
-                      parcela.status === "pendente"
+                      (parcela.status === "pendente" || parcela.status === "parcial")
                         ? "bg-red-50"
                         : ""
                     }
@@ -409,7 +439,14 @@ export default function VisualizarParcelasModal({
                       {parcela.numero_parcela}ª
                     </td>
                     <td className="px-4 py-3">
-                      R$ {parcela.valor_parcela.toFixed(2)}
+                      <div>
+                        <span>R$ {parcela.valor_parcela.toFixed(2)}</span>
+                        {parcela.saldo_restante !== undefined && parcela.saldo_restante > 0 && parcela.status !== "pago" && (
+                          <div className="text-xs text-blue-600">
+                            Saldo: R$ {parcela.saldo_restante.toFixed(2)}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       {editandoData === parcela.id ? (
@@ -417,29 +454,12 @@ export default function VisualizarParcelasModal({
                           <input
                             type="date"
                             value={novaData}
-                            onChange={(e) => {
-                              console.log(
-                                "Nova data selecionada:",
-                                e.target.value
-                              );
-                              setNovaData(e.target.value);
-                            }}
+                            onChange={(e) => setNovaData(e.target.value)}
                             className="border border-gray-300 rounded px-2 py-1 text-sm"
                             onFocus={(e) => e.target.showPicker()}
                           />
                           <button
-                            onClick={() => {
-                              console.log(
-                                "Clicou em confirmar para parcela:",
-                                parcela.id
-                              );
-                              console.log(
-                                "Data atual:",
-                                parcela.data_vencimento
-                              );
-                              console.log("Nova data:", novaData);
-                              handleAlterarDataVencimento(parcela.id);
-                            }}
+                            onClick={() => handleAlterarDataVencimento(parcela.id)}
                             disabled={salvandoData}
                             className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 disabled:bg-gray-400"
                           >
@@ -463,18 +483,9 @@ export default function VisualizarParcelasModal({
                               .join("/")}
                           </span>
                           <button
-                            onClick={() => {
-                              console.log(
-                                "Iniciando edição para parcela:",
-                                parcela.id
-                              );
-                              console.log(
-                                "Data atual da parcela:",
-                                parcela.data_vencimento
-                              );
-                              iniciarEdicaoData(parcela);
-                            }}
+                            onClick={() => iniciarEdicaoData(parcela)}
                             className="ml-2 text-blue-600 hover:text-blue-800"
+                            title="Alterar data"
                           >
                             <Edit size={12} />
                           </button>
@@ -482,19 +493,11 @@ export default function VisualizarParcelasModal({
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                          parcela.status
-                        )}`}
-                      >
-                        {formatStatus(parcela.status, parcela.data_vencimento)}
-                      </span>
+                      {getStatusBadge(parcela)}
                     </td>
                     <td className="px-4 py-3">
                       {parcela.data_pagamento
-                        ? new Date(parcela.data_pagamento).toLocaleDateString(
-                            "pt-BR"
-                          )
+                        ? new Date(parcela.data_pagamento).toLocaleDateString("pt-BR")
                         : "-"}
                     </td>
                     <td className="px-4 py-3">
@@ -503,33 +506,66 @@ export default function VisualizarParcelasModal({
                         : "-"}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex space-x-2">
+                      <div className="flex flex-wrap gap-2">
                         <button
                           onClick={() => iniciarEdicaoData(parcela)}
-                          className="flex items-center px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
-                          title="Alterar data de vencimento"
+                          className="flex items-center px-2 py-1 bg-gray-500 text-white rounded-md hover:bg-gray-600 text-xs"
+                          title="Alterar data"
                         >
-                          <Edit size={14} className="mr-1" />
-                          Editar Data
+                          <Edit size={12} className="mr-1" />
+                          Data
                         </button>
-                        {parcela.status === "pendente" &&
-                          editandoData !== parcela.id && (
-                            <button
-                              onClick={() => onMarcarComoPago(parcela)}
-                              className="flex items-center px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
-                              title="Marcar como Pago"
-                            >
-                              <CheckCircle size={14} className="mr-1" />
-                              Pagar
-                            </button>
-                          )}
+
+                        {parcela.status !== "pago" && parcela.status !== "cancelado" && (
+                          <button
+                            onClick={() => onMarcarComoPago(parcela)}
+                            className="flex items-center px-2 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-xs"
+                            title="Pagar Total"
+                          >
+                            <CheckCircle size={12} className="mr-1" />
+                            Pagar Total
+                          </button>
+                        )}
+
+                        {(parcela.saldo_restante !== undefined && parcela.saldo_restante > 0 || 
+                          parcela.status === "parcial") && onPagamentoParcial && (
+                          <button
+                            onClick={() => onPagamentoParcial(parcela)}
+                            className="flex items-center px-2 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs"
+                            title="Pagamento Parcial"
+                          >
+                            <DollarSign size={12} className="mr-1" />
+                            Pagar Parcial
+                          </button>
+                        )}
+
+                        {parcela.status !== "pago" && parcela.status !== "cancelado" && onNegociarParcela && (
+                          <button
+                            onClick={() => onNegociarParcela(parcela)}
+                            className="flex items-center px-2 py-1 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-xs"
+                            title="Negociar"
+                          >
+                            Negociar
+                          </button>
+                        )}
+
+                        {onVerHistorico && (
+                          <button
+                            onClick={() => onVerHistorico(parcela)}
+                            className="flex items-center px-2 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-xs"
+                            title="Histórico"
+                          >
+                            Histórico
+                          </button>
+                        )}
+
                         {parcela.status === "pago" && (
                           <button
                             onClick={() => abrirComprovante(parcela)}
-                            className="flex items-center px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                            className="flex items-center px-2 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs"
                             title="Emitir Comprovante"
                           >
-                            <FileText size={14} className="mr-1" />
+                            <FileText size={12} className="mr-1" />
                             Comprovante
                           </button>
                         )}
@@ -560,7 +596,6 @@ export default function VisualizarParcelasModal({
                   <ChevronLeft size={16} />
                 </button>
 
-                {/* Números das páginas */}
                 {Array.from({ length: Math.min(5, totalPaginas) }, (_, i) => {
                   let numeroPagina;
                   if (totalPaginas <= 5) {
