@@ -23,12 +23,25 @@ const nextConfig: NextConfig = {
         port: "",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "www.facebook.com",
+        port: "",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "connect.facebook.net",
+        port: "",
+        pathname: "/**",
+      },
     ],
   },
   trailingSlash: false,
   env: {
     NEXT_PUBLIC_MERCADO_LIVRE_APP_ID: process.env.MERCADO_LIVRE_APP_ID,
-    NEXT_PUBLIC_MERCADO_LIVRE_REDIRECT_URI: process.env.MERCADO_LIVRE_REDIRECT_URI,
+    NEXT_PUBLIC_MERCADO_LIVRE_REDIRECT_URI:
+      process.env.MERCADO_LIVRE_REDIRECT_URI,
     NFE_AUTO_ENABLED: process.env.NFE_AUTO_ENABLED,
     NFE_AUTO_INTERVAL_MINUTES: process.env.NFE_AUTO_INTERVAL_MINUTES,
     CRON_SECRET: process.env.CRON_SECRET,
@@ -78,11 +91,14 @@ const nextConfig: NextConfig = {
           },
         ],
       },
-      // CORREÇÃO: headers de cache como itens SEPARADOS no array
+      // headers de cache como itens SEPARADOS no array
       {
         source: "/_next/static/:path*",
         headers: [
-          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
         ],
       },
       {
@@ -92,7 +108,10 @@ const nextConfig: NextConfig = {
       {
         source: "/:all*(svg|jpg|png|webp|ico)",
         headers: [
-          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
         ],
       },
     ];

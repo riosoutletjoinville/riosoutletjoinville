@@ -58,7 +58,7 @@ function BeneficiosSection() {
     {
       icon: Truck,
       title: "Frete Grátis",
-      description: "Para compras acima de R$ 199",
+      description: "Para compras acima de R$ 500",
     },
     {
       icon: Shield,
