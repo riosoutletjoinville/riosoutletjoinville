@@ -2,7 +2,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,7 +48,6 @@ export default function ClienteOptions({
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [loading, setLoading] = useState(false);
   const [buscandoCEP, setBuscandoCEP] = useState(false);
-  const router = useRouter();
 
   // Estado inicial com dados do localStorage ou props
   const [dadosCliente, setDadosCliente] = useState<DadosFormularioCheckout>(
@@ -119,7 +117,7 @@ export default function ClienteOptions({
     }));
   };
 
- const handleLogin = async () => {
+  const handleLogin = async () => {
     if (!dadosCliente.email || !dadosCliente.senha) {
       alert("E-mail e senha são obrigatórios para login");
       return;
@@ -127,7 +125,7 @@ export default function ClienteOptions({
 
     setLoading(true);
     try {
-      const response = await fetch("/api/clientes/auth/login", {
+      const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -139,15 +137,40 @@ export default function ClienteOptions({
       const resultado = await response.json();
 
       if (resultado.success) {
-        // Salvar token
-        localStorage.setItem("cliente_token", resultado.token);
-        
-        // Limpar dados temporários do checkout
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem("checkout_tipo_selecionado");
-        
-        // REDIRECIONAR para checkout logado
-        router.push("/checkout/logado");
+        // Buscar dados completos do usuário
+        const userResponse = await fetch("/api/auth/me", {
+          headers: {
+            Authorization: `Bearer ${resultado.token}`,
+          },
+        });
+
+        const userData = await userResponse.json();
+
+        if (userData.success) {
+          const dadosParaEnviar: DadosFormularioCheckout = {
+            ...dadosCliente,
+            nome: userData.user.nome,
+            sobrenome: userData.user.sobrenome || "",
+            email: userData.user.email,
+            cpf: userData.user.cpf || "",
+            telefone: userData.user.telefone || "",
+            tipo_cliente: userData.user.tipo_cliente || "fisica",
+            // Campos de endereço do usuário
+            cep: userData.user.cep || "",
+            logradouro: userData.user.endereco || "",
+            numero: userData.user.numero || "",
+            complemento: userData.user.complemento || "",
+            bairro: userData.user.bairro || "",
+            cidade: userData.user.cidade || "",
+            estado: userData.user.estado || "",
+          };
+
+          // Salvar token no localStorage
+          localStorage.setItem("auth_token", resultado.token);
+          onTipoCadastro("login", dadosParaEnviar);
+        } else {
+          alert("Erro ao buscar dados do usuário");
+        }
       } else {
         alert(resultado.error || "Erro no login");
       }

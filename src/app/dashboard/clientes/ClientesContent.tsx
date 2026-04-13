@@ -1,13 +1,12 @@
 "use client";
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -22,10 +21,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Search, Plus, Edit, Trash2, Building2, User, Key, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Plus, Edit, Trash2, Building2, User, Key, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import Swal from 'sweetalert2';
 
-// ==================== INTERFACE CORRETA ====================
+// ==================== INTERFACE ====================
 interface Cliente {
   id: string;
   tipo_cliente: "fisica" | "juridica";
@@ -55,7 +55,7 @@ interface Cliente {
   created_at: string;
 }
 
-// ==================== MÁSCARAS ====================
+// ==================== MÁSCARAS (MANTIDAS ORIGINAIS) ====================
 const mascaraCNPJ = (value: string) => {
   return value
     .replace(/\D/g, "")
@@ -129,6 +129,9 @@ function Pagination({ currentPage, totalPages, onPageChange }: {
 export default function ClientesContent() {
   const { user } = useAuth();
   
+  // Ref para scroll
+  const formContainerRef = useRef<HTMLDivElement>(null);
+  
   // Estados
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,6 +139,7 @@ export default function ClientesContent() {
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
@@ -148,7 +152,7 @@ export default function ClientesContent() {
   const [novaSenha, setNovaSenha] = useState("");
   const [alterandoSenha, setAlterandoSenha] = useState(false);
 
-  // Formulário - TODOS OS CAMPOS DA TABELA
+  // Formulário
   const [formData, setFormData] = useState({
     tipo_cliente: "juridica" as "fisica" | "juridica",
     razao_social: "",
@@ -175,7 +179,19 @@ export default function ClientesContent() {
     senha: "",
   });
 
-  // ==================== BUSCAR CLIENTES COM PAGINAÇÃO ====================
+  // ==================== SCROLL PARA O FORMULÁRIO ====================
+  const scrollToForm = () => {
+    setTimeout(() => {
+      if (formContainerRef.current) {
+        formContainerRef.current.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start' 
+        });
+      }
+    }, 100);
+  };
+
+  // ==================== BUSCAR CLIENTES ====================
   const fetchClientes = async () => {
     try {
       setLoading(true);
@@ -212,19 +228,23 @@ export default function ClientesContent() {
       setClientes(data || []);
     } catch (error) {
       console.error("Erro ao buscar clientes:", error);
+      Swal.fire('Erro!', 'Erro ao carregar clientes', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  // ==================== SALVAR CLIENTE ====================
+  // ==================== SALVAR CLIENTE (MANTENDO AS MÁSCARAS) ====================
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    setIsSubmitting(true);
+    
     try {
-      // Preparar dados - SÓ OS CAMPOS QUE EXISTEM NA TABELA
+      // Preparar dados - MANTENDO OS VALORES COM MÁSCARA COMO ESTAVAM
       const clienteData: any = {
         tipo_cliente: formData.tipo_cliente,
-        razao_social: formData.tipo_cliente === "juridica" ? formData.razao_social : null,
+        razao_social: formData.tipo_cliente === "juridica" ? formData.razao_social : `${formData.nome} ${formData.sobrenome}`.trim(),
         nome_fantasia: formData.tipo_cliente === "juridica" ? formData.nome_fantasia : null,
         cnpj: formData.tipo_cliente === "juridica" ? formData.cnpj : null,
         nome: formData.tipo_cliente === "fisica" ? formData.nome : null,
@@ -263,65 +283,29 @@ export default function ClientesContent() {
           .update(clienteData)
           .eq("id", editingCliente.id);
         if (error) throw error;
+        Swal.fire('Sucesso!', 'Cliente atualizado com sucesso!', 'success');
       } else {
         const { error } = await supabase.from("clientes").insert([clienteData]);
         if (error) throw error;
+        Swal.fire('Sucesso!', 'Cliente criado com sucesso!', 'success');
       }
 
       resetForm();
       fetchClientes();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao salvar cliente:", error);
-      alert("Erro ao salvar cliente");
-    }
-  };
-
-  // ==================== ALTERAR SENHA ====================
-  const handleAlterarSenha = async () => {
-    if (!editingCliente || !novaSenha) return;
-    
-    setAlterandoSenha(true);
-    try {
-      const bcrypt = await import("bcryptjs");
-      const salt = await bcrypt.genSalt(12);
-      const senhaHash = await bcrypt.hash(novaSenha, salt);
       
-      const { error } = await supabase
-        .from("clientes")
-        .update({ 
-          senha: senhaHash,
-          ativo_login: true,
-          data_cadastro_login: new Date().toISOString()
-        })
-        .eq("id", editingCliente.id);
-      
-      if (error) throw error;
-      
-      alert("Senha alterada com sucesso!");
-      setNovaSenha("");
-      setShowSenhaModal(false);
-      fetchClientes();
-    } catch (error) {
-      console.error("Erro ao alterar senha:", error);
-      alert("Erro ao alterar senha");
+      let errorMessage = 'Erro ao salvar cliente';
+      if (error.message?.includes('duplicate key')) {
+        errorMessage = 'Já existe um cliente com este CPF/CNPJ cadastrado.';
+      }
+      Swal.fire('Erro!', errorMessage, 'error');
     } finally {
-      setAlterandoSenha(false);
+      setIsSubmitting(false);
     }
   };
 
-  // ==================== EXCLUIR CLIENTE ====================
-  const handleDelete = async (id: string) => {
-    if (!confirm("Tem certeza que deseja excluir este cliente?")) return;
-    try {
-      const { error } = await supabase.from("clientes").delete().eq("id", id);
-      if (error) throw error;
-      fetchClientes();
-    } catch (error) {
-      console.error("Erro ao excluir cliente:", error);
-    }
-  };
-
-  // ==================== EDITAR CLIENTE ====================
+  // ==================== EDITAR CLIENTE COM SCROLL ====================
   const handleEdit = (cliente: Cliente) => {
     setEditingCliente(cliente);
     setFormData({
@@ -351,6 +335,81 @@ export default function ClientesContent() {
     });
     setIsEditing(true);
     setIsCreating(false);
+    scrollToForm();
+  };
+
+  // ==================== NOVO CLIENTE ====================
+  const handleNewClient = () => {
+    resetForm();
+    setIsCreating(true);
+    setIsEditing(false);
+    scrollToForm();
+  };
+
+  // ==================== ALTERAR SENHA ====================
+  const handleAlterarSenha = async () => {
+    if (!editingCliente || !novaSenha) {
+      Swal.fire('Atenção', 'Digite uma nova senha', 'warning');
+      return;
+    }
+    
+    setAlterandoSenha(true);
+    try {
+      const bcrypt = await import("bcryptjs");
+      const salt = await bcrypt.genSalt(12);
+      const senhaHash = await bcrypt.hash(novaSenha, salt);
+      
+      const { error } = await supabase
+        .from("clientes")
+        .update({ 
+          senha: senhaHash,
+          ativo_login: true,
+          data_cadastro_login: new Date().toISOString()
+        })
+        .eq("id", editingCliente.id);
+      
+      if (error) throw error;
+      
+      Swal.fire('Sucesso!', 'Senha alterada com sucesso!', 'success');
+      setNovaSenha("");
+      setShowSenhaModal(false);
+      fetchClientes();
+    } catch (error) {
+      Swal.fire('Erro!', 'Erro ao alterar senha', 'error');
+    } finally {
+      setAlterandoSenha(false);
+    }
+  };
+
+  // ==================== EXCLUIR CLIENTE ====================
+  const handleDelete = async (id: string) => {
+    const result = await Swal.fire({
+      title: 'Tem certeza?',
+      text: "Você não poderá reverter isso!",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Sim, excluir!',
+      cancelButtonText: 'Cancelar'
+    });
+    
+    if (result.isConfirmed) {
+      try {
+        const { error } = await supabase.from("clientes").delete().eq("id", id);
+        if (error) throw error;
+        
+        Swal.fire('Excluído!', 'Cliente excluído com sucesso.', 'success');
+        
+        if (clientes.length === 1 && currentPage > 1) {
+          setCurrentPage(currentPage - 1);
+        } else {
+          fetchClientes();
+        }
+      } catch (error) {
+        Swal.fire('Erro!', 'Erro ao excluir cliente', 'error');
+      }
+    }
   };
 
   // ==================== RESETAR FORMULÁRIO ====================
@@ -396,7 +455,8 @@ export default function ClientesContent() {
     return (
       <div className="p-6">
         <div className="flex items-center justify-center h-64">
-          <div className="text-lg">Carregando...</div>
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-2 text-lg">Carregando...</span>
         </div>
       </div>
     );
@@ -408,7 +468,7 @@ export default function ClientesContent() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Clientes</h1>
-        <Button onClick={() => setIsCreating(true)}>
+        <Button onClick={handleNewClient}>
           <Plus className="mr-2 h-4 w-4" />
           Novo Cliente
         </Button>
@@ -446,258 +506,262 @@ export default function ClientesContent() {
 
       {/* Formulário de Criação/Edição */}
       {(isCreating || isEditing) && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{isEditing ? "Editar Cliente" : "Novo Cliente"}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Tipo Cliente */}
-              <div>
-                <Label>Tipo de Cliente *</Label>
-                <RadioGroup
-                  value={formData.tipo_cliente}
-                  onValueChange={(value: "fisica" | "juridica") =>
-                    setFormData({ ...formData, tipo_cliente: value })
-                  }
-                  className="flex space-x-4 mt-2"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="juridica" id="juridica" />
-                    <Label htmlFor="juridica">Pessoa Jurídica</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="fisica" id="fisica" />
-                    <Label htmlFor="fisica">Pessoa Física</Label>
-                  </div>
-                </RadioGroup>
-              </div>
+        <div ref={formContainerRef}>
+          <Card>
+            <CardHeader>
+              <CardTitle>{isEditing ? "Editar Cliente" : "Novo Cliente"}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Tipo Cliente */}
+                <div>
+                  <Label>Tipo de Cliente *</Label>
+                  <RadioGroup
+                    value={formData.tipo_cliente}
+                    onValueChange={(value: "fisica" | "juridica") =>
+                      setFormData({ ...formData, tipo_cliente: value })
+                    }
+                    className="flex space-x-4 mt-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="juridica" id="juridica" />
+                      <Label htmlFor="juridica">Pessoa Jurídica</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="fisica" id="fisica" />
+                      <Label htmlFor="fisica">Pessoa Física</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
 
-              {/* PJ */}
-              {formData.tipo_cliente === "juridica" && (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
+                {/* PJ */}
+                {formData.tipo_cliente === "juridica" && (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Razão Social *</Label>
+                        <Input
+                          value={formData.razao_social}
+                          onChange={(e) => setFormData({ ...formData, razao_social: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <Label>Nome Fantasia</Label>
+                        <Input
+                          value={formData.nome_fantasia}
+                          onChange={(e) => setFormData({ ...formData, nome_fantasia: e.target.value })}
+                        />
+                      </div>
+                    </div>
                     <div>
-                      <Label>Razão Social *</Label>
+                      <Label>CNPJ *</Label>
                       <Input
-                        value={formData.razao_social}
-                        onChange={(e) => setFormData({ ...formData, razao_social: e.target.value })}
+                        value={formData.cnpj}
+                        onChange={(e) => setFormData({ ...formData, cnpj: mascaraCNPJ(e.target.value) })}
                         required
                       />
                     </div>
-                    <div>
-                      <Label>Nome Fantasia</Label>
-                      <Input
-                        value={formData.nome_fantasia}
-                        onChange={(e) => setFormData({ ...formData, nome_fantasia: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <Label>CNPJ *</Label>
-                    <Input
-                      value={formData.cnpj}
-                      onChange={(e) => setFormData({ ...formData, cnpj: mascaraCNPJ(e.target.value) })}
-                      required
-                    />
-                  </div>
-                </>
-              )}
+                  </>
+                )}
 
-              {/* PF */}
-              {formData.tipo_cliente === "fisica" && (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
+                {/* PF */}
+                {formData.tipo_cliente === "fisica" && (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Nome *</Label>
+                        <Input
+                          value={formData.nome}
+                          onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <Label>Sobrenome *</Label>
+                        <Input
+                          value={formData.sobrenome}
+                          onChange={(e) => setFormData({ ...formData, sobrenome: e.target.value })}
+                          required
+                        />
+                      </div>
+                    </div>
                     <div>
-                      <Label>Nome *</Label>
+                      <Label>CPF *</Label>
                       <Input
-                        value={formData.nome}
-                        onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                        value={formData.cpf}
+                        onChange={(e) => setFormData({ ...formData, cpf: mascaraCPF(e.target.value) })}
                         required
                       />
                     </div>
-                    <div>
-                      <Label>Sobrenome *</Label>
-                      <Input
-                        value={formData.sobrenome}
-                        onChange={(e) => setFormData({ ...formData, sobrenome: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <Label>CPF *</Label>
-                    <Input
-                      value={formData.cpf}
-                      onChange={(e) => setFormData({ ...formData, cpf: mascaraCPF(e.target.value) })}
-                      required
-                    />
-                  </div>
-                </>
-              )}
+                  </>
+                )}
 
-              {/* Contato */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Email</Label>
-                  <Input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label>Telefone</Label>
-                  <Input
-                    value={formData.telefone}
-                    onChange={(e) => setFormData({ ...formData, telefone: mascaraTelefone(e.target.value) })}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label>Responsável</Label>
-                <Input
-                  value={formData.responsavel}
-                  onChange={(e) => setFormData({ ...formData, responsavel: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <Label>Local de Trabalho</Label>
-                <Input
-                  value={formData.local_trabalho}
-                  onChange={(e) => setFormData({ ...formData, local_trabalho: e.target.value })}
-                />
-              </div>
-
-              {/* Endereço */}
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label>CEP</Label>
-                  <Input
-                    value={formData.cep}
-                    onChange={(e) => setFormData({ ...formData, cep: mascaraCEP(e.target.value) })}
-                  />
-                </div>
-                <div>
-                  <Label>Estado</Label>
-                  <Input
-                    value={formData.estado}
-                    onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
-                    placeholder="UF"
-                  />
-                </div>
-                <div>
-                  <Label>Cidade</Label>
-                  <Input
-                    value={formData.cidade}
-                    onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div className="col-span-2">
-                  <Label>Endereço</Label>
-                  <Input
-                    value={formData.endereco}
-                    onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label>Número</Label>
-                  <Input
-                    value={formData.numero}
-                    onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Bairro</Label>
-                  <Input
-                    value={formData.bairro}
-                    onChange={(e) => setFormData({ ...formData, bairro: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label>Complemento</Label>
-                  <Input
-                    value={formData.complemento}
-                    onChange={(e) => setFormData({ ...formData, complemento: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              {/* PJ específico */}
-              {formData.tipo_cliente === "juridica" && (
+                {/* Contato */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Inscrição Estadual</Label>
+                    <Label>Email</Label>
                     <Input
-                      value={formData.inscricao_estadual}
-                      onChange={(e) => setFormData({ ...formData, inscricao_estadual: e.target.value })}
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     />
                   </div>
                   <div>
-                    <Label>Inscrição Municipal</Label>
+                    <Label>Telefone</Label>
                     <Input
-                      value={formData.inscricao_municipal}
-                      onChange={(e) => setFormData({ ...formData, inscricao_municipal: e.target.value })}
+                      value={formData.telefone}
+                      onChange={(e) => setFormData({ ...formData, telefone: mascaraTelefone(e.target.value) })}
                     />
                   </div>
                 </div>
-              )}
 
-              <div>
-                <Label>Observações</Label>
-                <Input
-                  value={formData.observacoes}
-                  onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-                />
-              </div>
-
-              {/* Senha - só na criação */}
-              {isCreating && (
                 <div>
-                  <Label>Senha {isCreating && "*"}</Label>
+                  <Label>Responsável</Label>
                   <Input
-                    type="password"
-                    value={formData.senha}
-                    onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
-                    required={isCreating}
-                    placeholder="Senha para acesso ao sistema"
+                    value={formData.responsavel}
+                    onChange={(e) => setFormData({ ...formData, responsavel: e.target.value })}
                   />
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Esta senha será criptografada
-                  </p>
                 </div>
-              )}
 
-              {/* Status */}
-              <div>
-                <Label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.ativo}
-                    onChange={(e) => setFormData({ ...formData, ativo: e.target.checked })}
-                    className="rounded"
+                <div>
+                  <Label>Local de Trabalho</Label>
+                  <Input
+                    value={formData.local_trabalho}
+                    onChange={(e) => setFormData({ ...formData, local_trabalho: e.target.value })}
                   />
-                  <span>Cliente Ativo</span>
-                </Label>
-              </div>
+                </div>
 
-              <div className="flex space-x-2 pt-4">
-                <Button type="submit">{isEditing ? "Atualizar" : "Criar"}</Button>
-                <Button type="button" variant="outline" onClick={resetForm}>
-                  Cancelar
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+                {/* Endereço */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <Label>CEP</Label>
+                    <Input
+                      value={formData.cep}
+                      onChange={(e) => setFormData({ ...formData, cep: mascaraCEP(e.target.value) })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Estado</Label>
+                    <Input
+                      value={formData.estado}
+                      onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
+                      placeholder="UF"
+                    />
+                  </div>
+                  <div>
+                    <Label>Cidade</Label>
+                    <Input
+                      value={formData.cidade}
+                      onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-2">
+                    <Label>Endereço</Label>
+                    <Input
+                      value={formData.endereco}
+                      onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Número</Label>
+                    <Input
+                      value={formData.numero}
+                      onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Bairro</Label>
+                    <Input
+                      value={formData.bairro}
+                      onChange={(e) => setFormData({ ...formData, bairro: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Complemento</Label>
+                    <Input
+                      value={formData.complemento}
+                      onChange={(e) => setFormData({ ...formData, complemento: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                {/* PJ específico */}
+                {formData.tipo_cliente === "juridica" && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Inscrição Estadual</Label>
+                      <Input
+                        value={formData.inscricao_estadual}
+                        onChange={(e) => setFormData({ ...formData, inscricao_estadual: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label>Inscrição Municipal</Label>
+                      <Input
+                        value={formData.inscricao_municipal}
+                        onChange={(e) => setFormData({ ...formData, inscricao_municipal: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <Label>Observações</Label>
+                  <Input
+                    value={formData.observacoes}
+                    onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
+                  />
+                </div>
+
+                {/* Senha - só na criação */}
+                {isCreating && (
+                  <div>
+                    <Label>Senha {isCreating && "*"}</Label>
+                    <Input
+                      type="password"
+                      value={formData.senha}
+                      onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
+                      required={isCreating}
+                      placeholder="Senha para acesso ao sistema"
+                    />
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Esta senha será criptografada
+                    </p>
+                  </div>
+                )}
+
+                {/* Status */}
+                <div>
+                  <Label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={formData.ativo}
+                      onChange={(e) => setFormData({ ...formData, ativo: e.target.checked })}
+                      className="rounded"
+                    />
+                    <span>Cliente Ativo</span>
+                  </Label>
+                </div>
+
+                <div className="flex space-x-2 pt-4">
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? "Salvando..." : (isEditing ? "Atualizar" : "Criar")}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={resetForm}>
+                    Cancelar
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Lista de Clientes */}

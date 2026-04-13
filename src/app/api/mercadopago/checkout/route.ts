@@ -7,7 +7,7 @@ import bcrypt from "bcryptjs";
 
 const baseUrl =
   process.env.NEXTAUTH_URL ||
-  "https://icons-try-serve-graduates.trycloudflare.com";
+  "https://algorithm-thick-vice-beaver.trycloudflare.com";
 
 export async function POST(request: NextRequest) {
   try {
@@ -282,9 +282,9 @@ export async function POST(request: NextRequest) {
         email: cliente_email,
       },
       back_urls: {
-        success: `${baseUrl}/checkout/sucesso`,
-        failure: `${baseUrl}/checkout/erro`,
-        pending: `${baseUrl}/checkout/pendente`,
+        success: `${baseUrl}/checkout/sucesso?pedido_id=${pedido.id}&tipo=${tipo_checkout}&criou_conta=${tipo_checkout === "cadastro"}`,
+        failure: `${baseUrl}/checkout/erro?pedido_id=${pedido.id}`,
+        pending: `${baseUrl}/checkout/pendente?pedido_id=${pedido.id}`,
       },
       auto_return: "approved" as const,
       notification_url: `${baseUrl}/api/mercadopago/webhook`,

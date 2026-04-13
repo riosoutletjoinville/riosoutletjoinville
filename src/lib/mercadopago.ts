@@ -20,12 +20,27 @@ export interface CreatePaymentRequest {
       type: "CPF" | "CNPJ";
       number: string;
     };
-    name?: string; // Adicionar nome do titular aqui
+    name?: string;
   };
-  first_name?: string; // Manter para compatibilidade, mas não usar
+  first_name?: string;
   last_name?: string;
   external_reference: string;
   description?: string;
+}
+
+// NOVA INTERFACE para Pix (sem token)
+export interface CreatePixPaymentRequest {
+  transaction_amount: number;
+  description: string;
+  payer: {
+    email: string;
+    identification?: {
+      type: "CPF" | "CNPJ";
+      number: string;
+    };
+    name?: string;
+  };
+  external_reference: string;
 }
 
 export class MercadoPagoService {
@@ -71,44 +86,21 @@ export class MercadoPagoService {
     return response;
   }
 
-  // src/lib/mercadopago.ts
-async processPayment(data: CreatePaymentRequest): Promise<PaymentResponseMP> {
-  let cpfNumber = "";
-
-  if (data.payer.identification && data.payer.identification.number) {
-    cpfNumber = data.payer.identification.number.replace(/\D/g, "");
-  }
-
-  // CORREÇÃO: O nome do titular deve ir dentro do payer
-  const payer = {
-    email: data.payer.email,
-    identification: {
-      type: "CPF" as const,
-      number: cpfNumber,
-    },
-    name: data.first_name, // Adicionar nome dentro do payer
-  };
-
+  
+  
+async createPixPayment(data: CreatePixPaymentRequest): Promise<PaymentResponseMP> {
   const paymentRequest = {
     transaction_amount: Number(data.transaction_amount.toFixed(2)),
-    token: data.token,
-    description: data.description || `Pedido #${data.external_reference}`,
-    installments: data.installments,
-    payment_method_id: data.payment_method_id,
-    issuer_id: data.issuer_id,
-    payer: payer,
-    // REMOVER first_name do nível raiz
+    description: data.description,
+    payment_method_id: "pix",
+    payer: {
+      email: data.payer.email,
+      // APENAS EMAIL - mais nada!
+    },
     external_reference: data.external_reference,
   };
 
-  console.log(
-    "Enviando pagamento - payer:",
-    JSON.stringify(paymentRequest.payer, null, 2),
-  );
-  console.log(
-    "Enviando pagamento - COMPLETO:",
-    JSON.stringify(paymentRequest, null, 2),
-  );
+  console.log("📤 Criando pagamento PIX:", JSON.stringify(paymentRequest, null, 2));
 
   const response = await this.makeRequest<PaymentResponseMP>(
     "POST",
@@ -121,6 +113,55 @@ async processPayment(data: CreatePaymentRequest): Promise<PaymentResponseMP> {
 
   return response;
 }
+  
+  async processPayment(data: CreatePaymentRequest): Promise<PaymentResponseMP> {
+    let cpfNumber = "";
+
+    if (data.payer.identification && data.payer.identification.number) {
+      cpfNumber = data.payer.identification.number.replace(/\D/g, "");
+    }
+
+    // Adicionar nome do titular deve ir dentro do payer
+    const payer = {
+      email: data.payer.email,
+      identification: {
+        type: "CPF" as const,
+        number: cpfNumber,
+      },
+      name: data.first_name, // Adicionar nome dentro do payer
+    };
+
+    const paymentRequest = {
+      transaction_amount: Number(data.transaction_amount.toFixed(2)),
+      token: data.token,
+      description: data.description || `Pedido #${data.external_reference}`,
+      installments: data.installments,
+      payment_method_id: data.payment_method_id,
+      issuer_id: data.issuer_id,
+      payer: payer,
+      external_reference: data.external_reference,
+    };
+
+    console.log(
+      "Enviando pagamento - payer:",
+      JSON.stringify(paymentRequest.payer, null, 2),
+    );
+    console.log(
+      "Enviando pagamento - COMPLETO:",
+      JSON.stringify(paymentRequest, null, 2),
+    );
+
+    const response = await this.makeRequest<PaymentResponseMP>(
+      "POST",
+      "/v1/payments",
+      paymentRequest,
+      {
+        "X-Idempotency-Key": randomUUID(),
+      },
+    );
+
+    return response;
+  }
 
   private async makeRequest<T>(
     method: "GET" | "POST",
@@ -129,19 +170,23 @@ async processPayment(data: CreatePaymentRequest): Promise<PaymentResponseMP> {
     extraHeaders?: Record<string, string>,
   ): Promise<T> {
     try {
-      // CORREÇÃO: Forçar serialização completa recursiva
-      const cleanData = JSON.parse(
-        JSON.stringify(data, (key, value) => {
-          // Se for objeto identification, garantir que seja serializado corretamente
-          if (key === "identification" && value && typeof value === "object") {
-            return {
-              type: value.type,
-              number: value.number,
-            };
-          }
-          return value;
-        }),
-      );
+      const cleanData = data
+        ? JSON.parse(
+            JSON.stringify(data, (key, value) => {
+              if (
+                key === "identification" &&
+                value &&
+                typeof value === "object"
+              ) {
+                return {
+                  type: value.type,
+                  number: value.number,
+                };
+              }
+              return value;
+            }),
+          )
+        : undefined;
 
       const config = {
         method,

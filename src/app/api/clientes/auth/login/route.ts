@@ -1,7 +1,8 @@
-//src/app/api/clientes/auth/login/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-import { clienteAuthService } from '@/lib/cliente-auth';
-export const dynamic = 'force-dynamic';
+// src/app/api/clientes/auth/login/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { supabase } from "@/lib/supabase";
+import bcrypt from "bcryptjs";
+import { createClienteSession } from "@/lib/cliente-auth";
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,48 +10,72 @@ export async function POST(request: NextRequest) {
 
     if (!email || !senha) {
       return NextResponse.json(
-        { error: 'Email e senha são obrigatórios' },
-        { status: 400 }
+        { success: false, error: "Email e senha são obrigatórios" },
+        { status: 400 },
       );
     }
 
-    const result = await clienteAuthService.loginCliente({ email, senha });
+    // Buscar cliente
+    const { data: cliente, error } = await supabase
+      .from("clientes")
+      .select(
+        "id, email, senha, ativo, ativo_login, nome, sobrenome, tipo_cliente",
+      )
+      .eq("email", email.toLowerCase().trim())
+      .single();
 
-    if (!result.success) {
+    if (error || !cliente) {
       return NextResponse.json(
-        { error: result.error },
-        { status: 401 }
+        { success: false, error: "Email ou senha inválidos" },
+        { status: 401 },
       );
     }
 
-    // VERIFICAÇÃO DO TOKEN
-    if (!result.token) {
+    // Verificar status
+    if (!cliente.ativo) {
       return NextResponse.json(
-        { error: 'Token não gerado' },
-        { status: 500 }
+        { success: false, error: "Conta desativada" },
+        { status: 401 },
       );
     }
 
-    const response = NextResponse.json({
+    if (!cliente.ativo_login) {
+      return NextResponse.json(
+        { success: false, error: "Login não ativado" },
+        { status: 401 },
+      );
+    }
+
+    // Verificar senha
+    const senhaValida = await bcrypt.compare(senha, cliente.senha);
+    if (!senhaValida) {
+      return NextResponse.json(
+        { success: false, error: "Email ou senha inválidos" },
+        { status: 401 },
+      );
+    }
+
+    // Criar sessão
+    const { token, expiresAt } = await createClienteSession(cliente.id);
+
+    return NextResponse.json({
       success: true,
-      cliente: result.cliente,
-      token: result.token
+      token,
+      expiresAt,
+      cliente_id: cliente.id,
+      user: {
+        id: cliente.id,
+        email: cliente.email,
+        nome: cliente.nome || "",
+        sobrenome: cliente.sobrenome || "",
+        tipo_cliente: cliente.tipo_cliente,
+      },
     });
-
-    // Set cookie com o token - AGORA result.token é garantido como string
-    response.cookies.set('cliente_token', result.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60 // 30 dias
-    });
-
-    return response;
   } catch (error) {
-    console.error('Erro no login:', error);
+    console.error("Erro no login:", error);
     return NextResponse.json(
-      { error: 'Erro interno do servidor' },
-      { status: 500 }
+      { success: false, error: "Erro interno do servidor" },
+      { status: 500 },
     );
   }
 }

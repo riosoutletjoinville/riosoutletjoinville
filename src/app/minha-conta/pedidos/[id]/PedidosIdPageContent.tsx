@@ -26,7 +26,8 @@ import {
   Phone,
   User,
   Building2,
-  DollarSign
+  DollarSign,
+  QrCode
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -39,6 +40,7 @@ declare module 'jspdf' {
     autoTable: (options: any) => jsPDF;
   }
 }
+
 
 interface PedidoDetalhado {
   id: string;
@@ -59,6 +61,10 @@ interface PedidoDetalhado {
   observacoes?: string;
   origem_pedido?: string;
   tipo_checkout?: string;
+  payment_method?: string;  
+  installments?: number;     
+  qr_code?: string;         
+  qr_code_base64?: string;
   itens: Array<{
     id: string;
     produto_titulo: string;
@@ -545,20 +551,62 @@ export default function PedidosIdPageContent() {
             </Card>
 
             {/* Informações de Pagamento */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CreditCard className="h-5 w-5" />
-                  Pagamento
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-gray-600 flex items-center gap-1">
-                  <DollarSign className="h-3 w-3" />
-                  {pedido.condicao_pagamento || 'À vista'}
-                </p>
-              </CardContent>
-            </Card>
+<Card>
+  <CardHeader>
+    <CardTitle className="flex items-center gap-2">
+      <CreditCard className="h-5 w-5" />
+      Pagamento
+    </CardTitle>
+  </CardHeader>
+  <CardContent className="space-y-3">
+    <div>
+      <p className="text-sm font-medium text-gray-700">Forma de Pagamento</p>
+      <p className="text-sm text-gray-600 flex items-center gap-1">
+        {pedido.payment_method === 'pix' ? (
+          <>
+            <QrCode className="h-3 w-3" />
+            PIX
+          </>
+        ) : pedido.payment_method === 'credit_card' ? (
+          <>
+            <CreditCard className="h-3 w-3" />
+            Cartão de Crédito
+          </>
+        ) : pedido.payment_method === 'debit_card' ? (
+          <>
+            <CreditCard className="h-3 w-3" />
+            Cartão de Débito
+          </>
+        ) : (
+          pedido.condicao_pagamento || 'Não informado'
+        )}
+      </p>
+    </div>
+    
+    {/* Exibir parcelas se for cartão de crédito */}
+    {pedido.payment_method === 'credit_card' && pedido.installments && pedido.installments > 1 && (
+      <div>
+        <p className="text-sm font-medium text-gray-700">Parcelamento</p>
+        <p className="text-sm text-gray-600">
+          {pedido.installments}x de R$ {(pedido.total / pedido.installments).toFixed(2)}
+        </p>
+      </div>
+    )}
+    
+    {/* Exibir QR Code se for PIX (opcional, na página de detalhes) */}
+    {pedido.payment_method === 'pix' && pedido.qr_code_base64 && (
+      <div className="mt-3">
+        <p className="text-sm font-medium text-gray-700 mb-2">QR Code PIX</p>
+        <img 
+          src={`data:image/png;base64,${pedido.qr_code_base64}`} 
+          alt="QR Code PIX" 
+          className="w-32 h-32 border rounded"
+        />
+        <p className="text-xs text-gray-500 mt-1">Código para pagamento</p>
+      </div>
+    )}
+  </CardContent>
+</Card>
 
             {/* Informações de Despacho */}
             {pedido.despachado && (

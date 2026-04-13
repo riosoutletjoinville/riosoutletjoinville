@@ -41,6 +41,7 @@ interface ItemPedidoPDF {
   embargue: string;
 }
 
+// NOVA INTERFACE PARA PARCELAS
 interface ParcelaPDF {
   numero_parcela: number;
   valor_parcela: number;
@@ -55,23 +56,16 @@ interface PedidoDataPDF {
   observacoes: string;
   condicaoPagamento: string;
   numeroPedido: string;
-  vendedor_nome?: string;
-  vendedor_email?: string;
-  vendedor_telefone?: string;
-  localTrabalho?: string;
+  vendedor_nome: string;
+  vendedor_email: string;
+  vendedor_telefone: string;
+  localTrabalho: string;
+  // NOVOS CAMPOS (OPCIONAIS)
   parcelas?: ParcelaPDF[];
   saldoPedidoAnterior?: number;
   valorProdutosNovos?: number;
+  // NOVO CAMPO PARA PEDIDO ANTERIOR
   pedidoAnteriorId?: string;
-  // Campos para ecommerce
-  origem_pedido?: string;
-  tipo_checkout?: string;
-  frete_valor?: number;
-  cep_entrega?: string;
-  opcao_frete?: string;
-  prazo_entrega?: string;
-  payment_method?: string;
-  installments?: number;
 }
 
 const loadImageAsBase64 = async (url: string): Promise<string> => {
@@ -111,12 +105,11 @@ export const generatePedidoPDF = async (
   const secondaryColor = [44, 62, 80];
   const lightColor = [236, 240, 241];
 
-  // Cabeçalho
   doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.rect(0, 0, pageWidth, 30, "F");
 
   try {
-    const logoBase64 = await loadImageAsBase64("/logo-login.png");
+    const logoBase64 = await loadImageAsBase64("/logomarca.png");
     if (logoBase64) {
       doc.addImage(logoBase64, "PNG", margin, 5, 40, 12);
     }
@@ -124,24 +117,17 @@ export const generatePedidoPDF = async (
     console.log("Erro ao processar logo:", error);
   }
 
-  // Determinar título baseado na origem
-  const isEcommerce = pedidoData.origem_pedido === "ecommerce";
-  const titulo = isEcommerce ? "PEDIDO E-COMMERCE" : "PEDIDO CONFIRMADO";
-
   doc.setFontSize(20);
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
-  doc.text(titulo, pageWidth / 2, 12, { align: "center" });
+  doc.text("PEDIDO CONFIRMADO", pageWidth / 2, 12, { align: "center" });
 
   doc.setFontSize(10);
   doc.text(`Nº: ${numeroPedido}`, pageWidth / 2, 20, { align: "center" });
-  
-  const dataEmissao = new Date().toLocaleString("pt-BR");
-  doc.text(`Data: ${dataEmissao}`, pageWidth / 2, 25, { align: "center" });
+  doc.text(`Data: ${new Date().toLocaleString("pt-BR")}`, pageWidth / 2, 25, { align: "center" });
 
   yPosition = 40;
 
-  // Informações da empresa
   doc.setFontSize(8);
   doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
   doc.setFont("helvetica", "bold");
@@ -151,16 +137,13 @@ export const generatePedidoPDF = async (
 
   doc.setFont("helvetica", "normal");
   
-  if (pedidoData.vendedor_nome) {
-    doc.text(`Vendedor: ${pedidoData.vendedor_nome}`, pageWidth - margin, yPosition + 4, { align: "right" });
-    doc.text(`Telefone: ${pedidoData.vendedor_telefone || "Não informado"}`, pageWidth - margin, yPosition + 8, { align: "right" });
-    doc.text(`Email: ${pedidoData.vendedor_email || "Não informado"}`, pageWidth - margin, yPosition + 12, { align: "right" });
-    yPosition += 15;
-  } else {
-    yPosition += 5;
-  }
+  doc.text(`Vendedor: ${pedidoData.vendedor_nome}`, pageWidth - margin, yPosition + 4, { align: "right" });
+  doc.text(`Telefone: ${pedidoData.vendedor_telefone}`, pageWidth - margin, yPosition + 8, { align: "right" });
+  doc.text(`Email: ${pedidoData.vendedor_email}`, pageWidth - margin, yPosition + 12, { align: "right" });
 
-  // RESUMO FINANCEIRO (se tiver saldo anterior)
+  yPosition += 15;
+
+  // NOVA SEÇÃO: RESUMO FINANCEIRO (APENAS SE TIVER SALDO ANTERIOR)
   if (pedidoData.saldoPedidoAnterior && pedidoData.saldoPedidoAnterior > 0) {
     doc.setFillColor(245, 245, 245);
     doc.rect(margin, yPosition, pageWidth - margin * 2, 20, "F");
@@ -180,7 +163,6 @@ export const generatePedidoPDF = async (
     yPosition += 25;
   }
 
-  // DADOS DO CLIENTE
   doc.setFillColor(lightColor[0], lightColor[1], lightColor[2]);
   doc.rect(margin, yPosition, pageWidth - margin * 2, 10, "F");
 
@@ -228,7 +210,7 @@ export const generatePedidoPDF = async (
     yPosition + (splitNomeCliente.length * 4) + 4,
   );
   doc.setFont("helvetica", "normal");
-  const localTrabalho = pedidoData.localTrabalho || cliente.local_trabalho || "Não informado";
+  const localTrabalho = pedidoData.localTrabalho || "Não informado";
   doc.text(
     localTrabalho,
     margin + 35,
@@ -255,7 +237,6 @@ export const generatePedidoPDF = async (
 
   yPosition += (splitNomeCliente.length * 4) + 12;
 
-  // Endereço
   if (cliente.endereco) {
     const enderecoCompleto = `${cliente.endereco}${
       cliente.numero ? ", " + cliente.numero : ""
@@ -278,82 +259,9 @@ export const generatePedidoPDF = async (
 
   yPosition += 10;
 
-  // INFORMAÇÕES DE ENTREGA (para ecommerce)
-  if (isEcommerce && pedidoData.cep_entrega) {
-    doc.setFillColor(lightColor[0], lightColor[1], lightColor[2]);
-    doc.rect(margin, yPosition, pageWidth - margin * 2, 10, "F");
+  // SEÇÃO REMOVIDA: CONDIÇÃO DE PAGAMENTO E PRAZO DE ENTREGA
 
-    doc.setFontSize(9);
-    doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-    doc.setFont("helvetica", "bold");
-    doc.text("INFORMAÇÕES DE ENTREGA", margin + 5, yPosition + 5.5);
-
-    yPosition += 12;
-
-    doc.setFontSize(8);
-    doc.setTextColor(0, 0, 0);
-    doc.setFont("helvetica", "normal");
-    
-    doc.text(`CEP: ${pedidoData.cep_entrega}`, margin, yPosition);
-    doc.text(`Transportadora: ${pedidoData.opcao_frete || "Não informado"}`, margin + 70, yPosition);
-    doc.text(`Prazo: ${pedidoData.prazo_entrega || "Não informado"}`, margin + 140, yPosition);
-    
-    yPosition += 6;
-    
-    if (pedidoData.frete_valor && pedidoData.frete_valor > 0) {
-      doc.text(`Frete: R$ ${pedidoData.frete_valor.toFixed(2)}`, margin, yPosition);
-    }
-    
-    yPosition += 8;
-  }
-
-  // INFORMAÇÕES DE PAGAMENTO
-  doc.setFillColor(lightColor[0], lightColor[1], lightColor[2]);
-  doc.rect(margin, yPosition, (pageWidth - margin * 2) / 2, 10, "F");
-  doc.setFontSize(9);
-  doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-  doc.setFont("helvetica", "bold");
-  doc.text("CONDIÇÃO DE PAGAMENTO", margin + 5, yPosition + 5.5);
-
-  doc.setFillColor(lightColor[0], lightColor[1], lightColor[2]);
-  doc.rect(margin + (pageWidth - margin * 2) / 2, yPosition, (pageWidth - margin * 2) / 2, 10, "F");
-  doc.text("PRAZO DE ENTREGA", margin + (pageWidth - margin * 2) / 2 + 5, yPosition + 5.5);
-
-  yPosition += 12;
-
-  doc.setTextColor(0, 0, 0);
-  doc.setFont("helvetica", "normal");
-  
-  // Condição de pagamento
-  let condicaoTexto = pedidoData.condicaoPagamento || "Não especificada";
-  if (isEcommerce && pedidoData.payment_method) {
-    const metodoPagamento = pedidoData.payment_method === "pix" ? "PIX" : 
-                           pedidoData.payment_method === "credit_card" ? "Cartão de Crédito" :
-                           pedidoData.payment_method === "bolbradesco" ? "Boleto" :
-                           pedidoData.payment_method;
-    
-    if (pedidoData.installments && pedidoData.installments > 1) {
-      condicaoTexto = `${metodoPagamento} em ${pedidoData.installments}x`;
-    } else {
-      condicaoTexto = metodoPagamento;
-    }
-  }
-  
-  const splitCondicao = doc.splitTextToSize(condicaoTexto, (pageWidth - margin * 2) / 2 - 10);
-  doc.text(splitCondicao, margin + 5, yPosition);
-
-  // Prazo de entrega
-  const prazosEntrega = [...new Set(pedidoData.itens.map((item) => item.embargue))];
-  const prazoTexto = isEcommerce && pedidoData.prazo_entrega 
-    ? pedidoData.prazo_entrega 
-    : prazosEntrega.join(", ") || "Não especificado";
-    
-  const splitPrazo = doc.splitTextToSize(prazoTexto, (pageWidth - margin * 2) / 2 - 10);
-  doc.text(splitPrazo, margin + (pageWidth - margin * 2) / 2 + 5, yPosition);
-
-  yPosition += Math.max(splitCondicao.length, splitPrazo.length) * 4 + 8;
-
-  // PARCELAS (se tiver)
+  // NOVA SEÇÃO: PARCELAS (APENAS SE TIVER PARCELAS)
   if (pedidoData.parcelas && pedidoData.parcelas.length > 0) {
     doc.setFillColor(lightColor[0], lightColor[1], lightColor[2]);
     doc.rect(margin, yPosition, pageWidth - margin * 2, 8, "F");
@@ -365,15 +273,22 @@ export const generatePedidoPDF = async (
 
     yPosition += 10;
 
+    // Preparar dados das parcelas para a tabela
     const parcelasData = pedidoData.parcelas.map((parcela) => [
       parcela.numero_parcela.toString(),
       `R$ ${parcela.valor_parcela.toFixed(2)}`,
       new Date(parcela.data_vencimento).toLocaleDateString('pt-BR'),
+      parcela.status.charAt(0).toUpperCase() + parcela.status.slice(1)
     ]);
 
+    // Adicionar tabela de parcelas
     autoTable(doc, {
       startY: yPosition,
-      head: [["Parcela", "Valor", "Vencimento"]],
+      head: [[
+        "Parcela",
+        "Valor",
+        "Vencimento"
+      ]],
       body: parcelasData,
       theme: "grid",
       headStyles: {
@@ -382,18 +297,60 @@ export const generatePedidoPDF = async (
         fontStyle: "bold",
         fontSize: 7,
       },
-      bodyStyles: { fontSize: 7 },
-      alternateRowStyles: { fillColor: [245, 245, 245] },
+      bodyStyles: {
+        fontSize: 7,
+      },
+      alternateRowStyles: {
+        fillColor: [245, 245, 245],
+      },
       margin: { left: margin, right: margin },
-      styles: { fontSize: 7, cellPadding: 2, lineColor: [0, 0, 0], lineWidth: 0.1 },
-      columnStyles: { 0: { cellWidth: 20 }, 1: { cellWidth: 30 }, 2: { cellWidth: 40 } },
+      styles: {
+        fontSize: 7,
+        cellPadding: 2,
+        lineColor: [0, 0, 0],
+        lineWidth: 0.1,
+      },
+      columnStyles: {
+        0: { cellWidth: 20 },
+        1: { cellWidth: 30 },
+        2: { cellWidth: 40 },
+      },
       tableWidth: "wrap",
     });
 
-    yPosition = (doc as any).lastAutoTable.finalY + 8;
+    // Atualizar posição Y após a tabela de parcelas
+    yPosition = (doc as any).lastAutoTable.finalY + 10;
+
+    // Informações do pedido anterior (se houver)
+    if (pedidoData.pedidoAnteriorId) {
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Pedido anterior: ${pedidoData.pedidoAnteriorId}`, margin, yPosition);
+      
+      if (pedidoData.saldoPedidoAnterior && pedidoData.saldoPedidoAnterior > 0) {
+        doc.text(`Saldo anterior: R$ ${pedidoData.saldoPedidoAnterior.toFixed(2)}`, margin, yPosition + 4);
+        yPosition += 8;
+      } else {
+        yPosition += 4;
+      }
+    }
+
+    // Resumo das parcelas
+    const totalParcelas = pedidoData.parcelas.length;
+    const valorParcela = pedidoData.parcelas[0]?.valor_parcela || 0;
+    const valorTotalParcelas = valorParcela * totalParcelas;
+
+    doc.setFontSize(8);
+    doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+    doc.setFont("helvetica", "bold");
+    doc.text(`RESUMO: ${totalParcelas}x de R$ ${valorParcela.toFixed(2)} = R$ ${valorTotalParcelas.toFixed(2)}`, 
+             margin, yPosition);
+
+    yPosition += 8;
   }
 
-  // TABELA DE PRODUTOS
+  // Tabela de Produtos
   doc.setFillColor(lightColor[0], lightColor[1], lightColor[2]);
   doc.rect(margin, yPosition, pageWidth - margin * 2, 8, "F");
 
@@ -406,7 +363,7 @@ export const generatePedidoPDF = async (
 
   const tableData = pedidoData.itens.map((item, index) => {
     const tamanhosQuantidades = Object.entries(item.tamanhos)
-      .filter(([, qtd]) => qtd > 0)
+      .filter(([_, qtd]) => qtd > 0)
       .map(([tamanho, qtd]) => `${tamanho}: ${qtd}`)
       .join(", ");
 
@@ -415,7 +372,7 @@ export const generatePedidoPDF = async (
       item.produto.titulo,
       item.produto.codigo || "-",
       item.produto.ncm || "-",
-      tamanhosQuantidades || "-",
+      tamanhosQuantidades,
       item.quantidade.toString(),
       `R$ ${item.preco_unitario.toFixed(2)}`,
       `${item.desconto}%`,
@@ -425,7 +382,17 @@ export const generatePedidoPDF = async (
 
   const tableOptions: UserOptions = {
     startY: yPosition,
-    head: [["#", "Produto", "Código", "NCM", "Tamanhos", "Qtd", "Preço Unit.", "Desc.", "Subtotal"]],
+    head: [[
+      "#",
+      "Produto",
+      "Código",
+      "NCM",
+      "Tamanhos",
+      "Qtd",
+      "Preço Unit.",
+      "Desc.",
+      "Subtotal",
+    ]],
     body: tableData,
     theme: "grid",
     headStyles: {
@@ -434,10 +401,19 @@ export const generatePedidoPDF = async (
       fontStyle: "bold",
       fontSize: 7,
     },
-    bodyStyles: { fontSize: 7 },
-    alternateRowStyles: { fillColor: [245, 245, 245] },
+    bodyStyles: {
+      fontSize: 7,
+    },
+    alternateRowStyles: {
+      fillColor: [245, 245, 245],
+    },
     margin: { left: margin, right: margin },
-    styles: { fontSize: 7, cellPadding: 1, lineColor: [0, 0, 0], lineWidth: 0.1 },
+    styles: {
+      fontSize: 7,
+      cellPadding: 1,
+      lineColor: [0, 0, 0],
+      lineWidth: 0.1,
+    },
     columnStyles: {
       0: { cellWidth: 8 },
       1: { cellWidth: 40 },
@@ -456,40 +432,36 @@ export const generatePedidoPDF = async (
   
   const finalY = (doc as any).lastAutoTable.finalY + 5;
 
-  // TOTAL
+  // TOTAL ATUALIZADO
   doc.setFontSize(10);
   doc.setFont("helvetica", "bold");
   
-  let totalY = finalY;
-  
+  // Se há saldo anterior, mostrar detalhamento
   if (pedidoData.saldoPedidoAnterior && pedidoData.saldoPedidoAnterior > 0) {
-    doc.text("Valor produtos novos:", pageWidth - margin - 60, totalY);
-    doc.text(`R$ ${pedidoData.valorProdutosNovos?.toFixed(2) || '0,00'}`, pageWidth - margin, totalY, { align: "right" });
+    doc.text("Valor produtos novos:", pageWidth - margin - 60, finalY);
+    doc.text(`R$ ${pedidoData.valorProdutosNovos?.toFixed(2) || '0,00'}`, pageWidth - margin, finalY, {
+      align: "right",
+    });
 
-    doc.text("Saldo anterior:", pageWidth - margin - 60, totalY + 5);
-    doc.text(`R$ ${pedidoData.saldoPedidoAnterior.toFixed(2)}`, pageWidth - margin, totalY + 5, { align: "right" });
+    doc.text("Saldo anterior:", pageWidth - margin - 60, finalY + 5);
+    doc.text(`R$ ${pedidoData.saldoPedidoAnterior.toFixed(2)}`, pageWidth - margin, finalY + 5, {
+      align: "right",
+    });
 
-    totalY += 10;
+    doc.text("TOTAL:", pageWidth - margin - 60, finalY + 10);
+    doc.text(`R$ ${pedidoData.total.toFixed(2)}`, pageWidth - margin, finalY + 10, {
+      align: "right",
+    });
+  } else {
+    // Total normal sem saldo anterior
+    doc.text("TOTAL:", pageWidth - margin - 30, finalY);
+    doc.text(`R$ ${pedidoData.total.toFixed(2)}`, pageWidth - margin, finalY, {
+      align: "right",
+    });
   }
-  
-  // Adicionar frete se for ecommerce
-  if (isEcommerce && pedidoData.frete_valor && pedidoData.frete_valor > 0) {
-    const subtotalSemFrete = pedidoData.total - pedidoData.frete_valor;
-    doc.text("Subtotal:", pageWidth - margin - 60, totalY);
-    doc.text(`R$ ${subtotalSemFrete.toFixed(2)}`, pageWidth - margin, totalY, { align: "right" });
-    
-    doc.text("Frete:", pageWidth - margin - 60, totalY + 5);
-    doc.text(`R$ ${pedidoData.frete_valor.toFixed(2)}`, pageWidth - margin, totalY + 5, { align: "right" });
-    
-    totalY += 10;
-  }
-  
-  doc.text("TOTAL:", pageWidth - margin - 60, totalY);
-  doc.text(`R$ ${pedidoData.total.toFixed(2)}`, pageWidth - margin, totalY, { align: "right" });
 
-  // OBSERVAÇÕES
-  let observacoesY = totalY + 8;
   if (pedidoData.observacoes) {
+    const observacoesY = finalY + (pedidoData.saldoPedidoAnterior ? 15 : 8);
     doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
     doc.text("OBSERVAÇÕES:", margin, observacoesY);
@@ -500,19 +472,17 @@ export const generatePedidoPDF = async (
       pageWidth - margin * 2,
     );
     doc.text(splitObservacoes, margin, observacoesY + 4);
-    observacoesY += splitObservacoes.length * 4 + 8;
   }
 
-  // RODAPÉ
   const footerY = doc.internal.pageSize.getHeight() - 15;
   doc.setFontSize(7);
   doc.setTextColor(100, 100, 100);
-  
-  const mensagemRodape = isEcommerce 
-    ? "Este documento é um comprovante de pedido realizado através do e-commerce."
-    : "Este documento é um pedido confirmado.";
-    
-  doc.text(mensagemRodape, pageWidth / 2, footerY, { align: "center" });
+  doc.text(
+    "Este documento é um pedido confirmado.",
+    pageWidth / 2,
+    footerY,
+    { align: "center" },
+  );
   doc.text(
     "Emitido eletronicamente em " + new Date().toLocaleDateString("pt-BR"),
     pageWidth / 2,
@@ -520,6 +490,5 @@ export const generatePedidoPDF = async (
     { align: "center" },
   );
 
-  const nomeArquivo = isEcommerce ? `Pedido-Ecommerce-${numeroPedido}.pdf` : `Pedido-${numeroPedido}.pdf`;
-  doc.save(nomeArquivo);
+  doc.save(`Pedido-${numeroPedido}.pdf`);
 };

@@ -1,10 +1,9 @@
-// src/app/checkouten/page.tsx
+// src/app/checkout/CheckoutPageContent.tsx
 "use client";
 export const dynamic = "force-dynamic";
 
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter } from "next/navigation";
-import Script from "next/script";
 import ClienteOptions from "@/components/checkout/ClienteOptions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,6 +14,8 @@ import {
   ClienteDadosMP,
 } from "@/types/mercadopago";
 import { useCarrinho } from "@/hooks/useCarrinho";
+import { PixPayment } from "@/components/checkout/PixPayment";
+import { CreditCard, QrCode } from "lucide-react";
 
 declare global {
   interface Window {
@@ -35,25 +36,27 @@ function CheckoutContent() {
   const [mpLoaded, setMpLoaded] = useState<boolean>(false);
   const [bricksError, setBricksError] = useState<string>("");
   const [sdkLoading, setSdkLoading] = useState<boolean>(false);
+  const [metodoPagamento, setMetodoPagamento] = useState<"cartao" | "pix" | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const bricksBuilder = useRef<any>(null);
   const router = useRouter();
 
-  // Adicionar hook do carrinho para acessar o frete
-  const { frete, totalComFrete, valorFrete } = useCarrinho();
+  const { frete, totalComFrete, valorFrete, limparCarrinho } = useCarrinho();
 
-  // Carregar SDK manualmente
+  useEffect(() => {
+    const token = localStorage.getItem("cliente_token");
+    if (token) {
+      console.log("🔄 Cliente já logado, redirecionando para checkout/logado");
+      router.push("/checkout/logado");
+    }
+  }, [router]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
-
-    // Se já carregou, não carregar novamente
     if (window.MercadoPago) {
-      console.log("✅ SDK já estava carregado");
       setMpLoaded(true);
       return;
     }
-
-    // Se já está carregando, não carregar novamente
     if (sdkLoading) return;
 
     setSdkLoading(true);
@@ -80,52 +83,43 @@ function CheckoutContent() {
 
     document.body.appendChild(script);
 
-    return () => {
-      // Não remover o script para evitar problemas
-    };
+    return () => {};
   }, [sdkLoading]);
 
   useEffect(() => {
-  const carrinhoSalvo = localStorage.getItem("carrinho");
-  const dadosFormularioSalvo = localStorage.getItem("checkout_form_data");
+    const carrinhoSalvo = localStorage.getItem("carrinho");
+    const dadosFormularioSalvo = localStorage.getItem("checkout_form_data");
 
-  if (carrinhoSalvo) {
-    const carrinhoParsed = JSON.parse(carrinhoSalvo);
-    console.log("📦 CARRINHO CARREGADO:", JSON.stringify(carrinhoParsed, null, 2));
-    // Verificar se cada item tem variacao_id
-    carrinhoParsed.forEach((item: any, index: number) => {
-      console.log(`Item ${index}:`, {
-        titulo: item.titulo,
-        produto_id: item.produto_id,
-        variacao_id: item.variacao_id || "❌ NÃO TEM VARIACAO_ID!",
-        variacao: item.variacao
-      });
-    });
-    setCarrinho(carrinhoParsed);
-  }
+    if (carrinhoSalvo) {
+      const carrinhoParsed = JSON.parse(carrinhoSalvo);
+      setCarrinho(carrinhoParsed);
+    }
 
-  if (dadosFormularioSalvo) {
-    setDadosFormulario(JSON.parse(dadosFormularioSalvo));
-  }
-}, []);
+    if (dadosFormularioSalvo) {
+      setDadosFormulario(JSON.parse(dadosFormularioSalvo));
+    }
+  }, []);
 
   const salvarDadosFormulario = (dados: DadosFormularioCheckout) => {
     localStorage.setItem("checkout_form_data", JSON.stringify(dados));
     setDadosFormulario(dados);
   };
 
-  // Calcular total dos itens
   const totalItens = carrinho.reduce((acc, item) => {
     return acc + item.preco_unitario * item.quantidade;
   }, 0);
 
-  // Usar totalComFrete do hook (já inclui frete)
   const total = totalComFrete;
 
   const handleTipoCadastro = async (
     tipo: "login" | "cadastro" | "guest",
     dados?: DadosFormularioCheckout,
   ) => {
+    if (tipo === "login") {
+      router.push("/checkout/logado");
+      return;
+    }
+
     if (!dados) {
       alert("Dados do cliente são obrigatórios");
       return;
@@ -142,7 +136,6 @@ function CheckoutContent() {
         cpf: dados.cpf || "",
         telefone: dados.telefone || "",
         tipo_cliente: dados.tipo_cliente,
-        // CAMPOS DE ENDEREÇO
         cep: dados.cep || "",
         logradouro: dados.logradouro || "",
         numero: dados.numero || "",
@@ -165,7 +158,6 @@ function CheckoutContent() {
           cnpj: dados.cnpj || "",
           telefone: dados.telefone || "",
           tipo_cliente: dados.tipo_cliente,
-          // CAMPOS DE ENDEREÇO
           cep: dados.cep || "",
           logradouro: dados.logradouro || "",
           numero: dados.numero || "",
@@ -182,7 +174,7 @@ function CheckoutContent() {
         subtotal: totalItens,
         frete_valor: valorFrete,
         frete_nome: frete?.opcao_selecionada?.nome,
-        frete_prazo: frete?.opcao_selecionada?.prazo, // Prazo de entrega
+        frete_prazo: frete?.opcao_selecionada?.prazo,
         cliente_email: dados.email,
         cliente_nome: dados.nome,
         criar_conta: tipo === "cadastro",
@@ -190,13 +182,6 @@ function CheckoutContent() {
         cliente_dados: clienteDadosMP,
         tipo_checkout: tipo,
       };
-
-      console.log("📤 Enviando para API com frete:", {
-        totalItens,
-        valorFrete,
-        totalComFrete: total,
-        freteInfo: frete?.opcao_selecionada,
-      });
 
       const response = await fetch("/api/mercadopago/checkout", {
         method: "POST",
@@ -211,14 +196,12 @@ function CheckoutContent() {
       }
 
       const resultado = await response.json();
-      console.log("✅ Resultado da API:", resultado);
 
       if (resultado.success) {
         setPreferenceId(resultado.preference_id);
         setPedidoId(resultado.pedido_id);
         setEtapa("pagamento");
       } else {
-        console.error("❌ Erro no resultado:", resultado.error);
         alert("Erro ao processar checkout: " + resultado.error);
         setEtapa("selecao");
       }
@@ -231,24 +214,15 @@ function CheckoutContent() {
 
   const initializeBricks = async () => {
     if (!window.MercadoPago || !preferenceId) {
-      console.error("❌ Missing MercadoPago SDK or preferenceId:", {
-        hasMercadoPago: !!window.MercadoPago,
-        preferenceId,
-      });
       return;
     }
 
     try {
-      console.log("🔄 Initializing Bricks with preference:", preferenceId);
-
       const mp = new window.MercadoPago(
         process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY!,
-        {
-          locale: "pt-BR",
-        },
+        { locale: "pt-BR" },
       );
 
-      // Clear container first
       const container = document.getElementById("paymentBrick_container_nd");
       if (container) {
         container.innerHTML = "";
@@ -260,11 +234,7 @@ function CheckoutContent() {
           amount: total,
         },
         customization: {
-          visual: {
-            style: {
-              theme: "default",
-            },
-          },
+          visual: { style: { theme: "default" } },
           paymentMethods: {
             creditCard: "all",
             bankTransfer: "all",
@@ -272,42 +242,18 @@ function CheckoutContent() {
         },
         callbacks: {
           onReady: () => {
-            console.log("✅ Brick ready");
             setBricksError("");
           },
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           onError: (error: any) => {
-            console.error("❌ Brick error:", error);
-            setBricksError(
-              error.message || "Erro ao carregar opções de pagamento",
-            );
+            setBricksError(error.message || "Erro ao carregar opções de pagamento");
           },
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           onSubmit: (cardFormData: any) => {
-            console.log("📤 Brick form data COMPLETO:", cardFormData);
             const formData = cardFormData.formData;
-
-            let cpfNumber = "";
-
-            if (formData.cardholder?.identification?.number) {
-              cpfNumber = formData.cardholder.identification.number;
-            } else if (formData.payer?.identification?.number) {
-              cpfNumber = formData.payer.identification.number;
-            } else if (formData.identification?.number) {
-              cpfNumber = formData.identification.number;
-            } else if (formData.cpf) {
-              cpfNumber = formData.cpf;
-            }
-
-            if (!cpfNumber && dadosFormulario?.cpf) {
-              cpfNumber = dadosFormulario.cpf;
-            }
-
+            const cpfNumber = formData.payer?.identification?.number || dadosFormulario?.cpf || "";
             const cpfClean = cpfNumber.replace(/\D/g, "");
-            const email =
-              formData.payer?.email || formData.email || dadosFormulario?.email;
-            const cardholderName =
-              formData.cardholder?.name || formData.first_name || "APRO";
+            const email = formData.payer?.email || dadosFormulario?.email;
 
             const paymentData = {
               transaction_amount: total,
@@ -317,26 +263,19 @@ function CheckoutContent() {
               payment_method_id: formData.payment_method_id,
               issuer_id: formData.issuer_id,
               external_reference: pedidoId,
+              first_name: dadosFormulario?.nome || "Cliente",
               payer: {
                 email: email,
                 identification: {
-                  type: "CPF",
+                  type: "CPF" as const,
                   number: cpfClean,
                 },
-                name: cardholderName,
               },
             };
-
-            console.log(
-              "🔄 Dados para processamento (validados):",
-              paymentData,
-            );
             processPayment(paymentData);
           },
         },
       });
-
-      console.log("✅ Bricks created successfully");
     } catch (error) {
       console.error("💥 Error initializing Bricks:", error);
       setBricksError("Falha ao inicializar processador de pagamentos");
@@ -348,47 +287,19 @@ function CheckoutContent() {
     try {
       setEtapa("processando");
 
-      const cpfNumber = formData.payer?.identification?.number || "";
-      const cpfClean = cpfNumber.replace(/\D/g, "");
-      const cardholderName = formData.payer?.name || "APRO";
-
-      const paymentData = {
-        transaction_amount: total,
-        token: formData.token,
-        description: `Pedido #${pedidoId}`,
-        installments: parseInt(formData.installments) || 1,
-        payment_method_id: formData.payment_method_id,
-        issuer_id: formData.issuer_id,
-        external_reference: pedidoId,
-        payer: {
-          email: formData.payer?.email || dadosFormulario?.email,
-          identification: {
-            type: "CPF",
-            number: cpfClean,
-          },
-          name: cardholderName,
-        },
-      };
-
-      console.log(
-        "📤 Enviando pagamento com dados completos:",
-        JSON.stringify(paymentData, null, 2),
-      );
-
       const response = await fetch("/api/mercadopago/process-payment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(paymentData),
+        body: JSON.stringify(formData),
       });
 
       const result = await response.json();
 
       if (result.success) {
+        limparCarrinho();
         router.push("/checkout/sucesso");
       } else {
-        alert(
-          "Pagamento não aprovado: " + (result.error || "Erro desconhecido"),
-        );
+        alert("Pagamento não aprovado: " + (result.error || "Erro desconhecido"));
         setEtapa("pagamento");
       }
     } catch (error) {
@@ -399,24 +310,10 @@ function CheckoutContent() {
   };
 
   useEffect(() => {
-    if (etapa === "pagamento" && mpLoaded && preferenceId && dadosFormulario) {
-      console.log("🎯 Todas as condições atendidas, inicializando Bricks...");
+    if (etapa === "pagamento" && metodoPagamento === "cartao" && mpLoaded && preferenceId) {
       initializeBricks();
     }
-  }, [etapa, mpLoaded, preferenceId, dadosFormulario]);
-
-  useEffect(() => {
-    if (etapa === "pagamento") {
-      console.log("🔍 Debug condições Bricks:", {
-        etapa,
-        mpLoaded,
-        preferenceId,
-        hasDadosFormulario: !!dadosFormulario,
-        allConditions:
-          etapa === "pagamento" && mpLoaded && preferenceId && dadosFormulario,
-      });
-    }
-  }, [etapa, mpLoaded, preferenceId, dadosFormulario]);
+  }, [etapa, metodoPagamento, mpLoaded, preferenceId]);
 
   if (carrinho.length === 0 && etapa !== "pagamento") {
     return (
@@ -461,7 +358,7 @@ function CheckoutContent() {
               <CardContent className="pt-6">
                 <h2 className="text-xl font-semibold mb-4">Pagamento</h2>
 
-                {/* Mostrar resumo com frete */}
+                {/* Resumo com frete */}
                 <div className="bg-gray-50 p-4 rounded-lg mb-6">
                   <div className="space-y-2">
                     <div className="flex justify-between">
@@ -493,33 +390,87 @@ function CheckoutContent() {
                   </div>
                 </div>
 
-                {bricksError && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-                    <p className="text-red-800 text-sm">
-                      Erro no processador de pagamentos: {bricksError}
+                {/* Seleção de método de pagamento */}
+                {metodoPagamento === null ? (
+                  <div className="space-y-4">
+                    <p className="text-gray-600 mb-4">
+                      Escolha a forma de pagamento para finalizar seu pedido
                     </p>
+
                     <Button
-                      onClick={initializeBricks}
-                      variant="outline"
-                      size="sm"
-                      className="mt-2"
+                      onClick={() => setMetodoPagamento("cartao")}
+                      className="w-full bg-green-600 hover:bg-green-700"
+                      size="lg"
                     >
-                      Tentar Novamente
+                      <CreditCard className="mr-2 h-5 w-5" />
+                      Cartão de Crédito
+                    </Button>
+
+                    <Button
+                      onClick={() => setMetodoPagamento("pix")}
+                      className="w-full bg-blue-600 hover:bg-blue-700"
+                      size="lg"
+                      variant="outline"
+                    >
+                      <QrCode className="mr-2 h-5 w-5" />
+                      PIX
                     </Button>
                   </div>
-                )}
+                ) : metodoPagamento === "cartao" ? (
+                  <>
+                    {bricksError && (
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                        <p className="text-red-800 text-sm">{bricksError}</p>
+                        <Button
+                          onClick={initializeBricks}
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                        >
+                          Tentar Novamente
+                        </Button>
+                      </div>
+                    )}
 
-                <div
-                  id="paymentBrick_container_nd"
-                  className="min-h-[400px] flex items-center justify-center"
-                >
-                  {!bricksError && (
-                    <div className="text-center text-gray-500">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-2"></div>
-                      <div id="paymentBrick_container"></div>
+                    <div
+                      id="paymentBrick_container_nd"
+                      className="min-h-[400px] flex items-center justify-center"
+                    >
+                      {!bricksError && (
+                        <div className="text-center text-gray-500">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-2"></div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+
+                    <Button
+                      variant="outline"
+                      onClick={() => setMetodoPagamento(null)}
+                      className="mt-4"
+                    >
+                      Voltar e escolher outro método
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <PixPayment
+                      pedidoId={pedidoId}
+                      total={total}
+                      onPaymentConfirmed={() => {
+                        limparCarrinho();
+                        router.push(`/checkout/sucesso?pedido_id=${pedidoId}`);
+                      }}
+                    />
+
+                    <Button
+                      variant="outline"
+                      onClick={() => setMetodoPagamento(null)}
+                      className="mt-4"
+                    >
+                      Voltar e escolher outro método
+                    </Button>
+                  </>
+                )}
 
                 <div className="mt-4 text-center">
                   <Button variant="outline" onClick={() => setEtapa("selecao")}>
@@ -549,7 +500,6 @@ function CheckoutContent() {
   );
 }
 
-// Loading component para checkout
 function CheckoutLoading() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -563,7 +513,6 @@ function CheckoutLoading() {
   );
 }
 
-// Componente principal com Suspense
 export default function CheckoutPageContent() {
   return (
     <Suspense fallback={<CheckoutLoading />}>

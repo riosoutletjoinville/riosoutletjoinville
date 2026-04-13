@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (payment.status === "approved") {
+      { /* if (payment.status === "approved") {
         console.log("💰 Pagamento aprovado, criando movimento financeiro...");
 
         const { error: financeError } = await supabase
@@ -236,7 +236,7 @@ export async function POST(request: NextRequest) {
             }
           }
         }
-      }
+      } */ }
 
       return NextResponse.json({
         success: true,

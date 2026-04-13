@@ -157,9 +157,22 @@ export function ClienteAuthProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const logout = useCallback(async () => {
+  try {
+    // Chamar API de logout para limpar cookie
+    await fetch('/api/clientes/auth/logout', {
+      method: 'POST',
+    });
+  } catch (error) {
+    console.error("Erro ao chamar API de logout:", error);
+  } finally {
+    // Limpar estado local
     setCliente(null);
     localStorage.removeItem("cliente_auth");
-  }, []);
+    
+    // Redirecionar usando window.location para garantir
+    window.location.href = '/';
+  }
+}, []);
 
   const atualizarCliente = useCallback(async (dados: Partial<Cliente>) => {
     try {

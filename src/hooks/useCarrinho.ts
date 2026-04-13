@@ -1,6 +1,7 @@
 // src/hooks/useCarrinho.ts
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { supabase } from "@/lib/supabase";
 
 export interface ItemCarrinho {
   id: string;
@@ -26,7 +27,7 @@ export interface OpcaoFrete {
 export interface DadosFrete {
   cep: string;
   opcao_selecionada?: OpcaoFrete;
-  opcoes_disponiveis?: OpcaoFrete[]; // NOVO: lista de opções
+  opcoes_disponiveis?: OpcaoFrete[];
   endereco?: {
     cep: string;
     logradouro: string;
@@ -104,6 +105,83 @@ export function useCarrinho() {
     };
   }, [isLoaded]);
 
+  // NOVO: Verificar estoque de um item específico
+  const verificarEstoqueItem = useCallback(async (
+    produtoId: string,
+    variacaoId?: string | null,
+    quantidadeDesejada?: number
+  ): Promise<boolean> => {
+    try {
+      // Buscar produto com variações
+      const { data: produto, error } = await supabase
+        .from("produtos")
+        .select(`
+          id,
+          estoque,
+          variacoes:produto_variacoes(
+            id,
+            estoque
+          )
+        `)
+        .eq("id", produtoId)
+        .single();
+
+      if (error || !produto) {
+        console.error("Erro ao buscar produto:", error);
+        return false;
+      }
+
+      let estoqueDisponivel: number;
+
+      if (variacaoId) {
+        // Produto com variação - verificar estoque da variação específica
+        const variacao = produto.variacoes?.find((v: any) => v.id === variacaoId);
+        estoqueDisponivel = variacao?.estoque || 0;
+      } else {
+        // Produto sem variação
+        estoqueDisponivel = produto.estoque || 0;
+      }
+
+      // Se quantidade desejada foi fornecida, verificar se é suficiente
+      if (quantidadeDesejada !== undefined) {
+        return estoqueDisponivel >= quantidadeDesejada;
+      }
+
+      return estoqueDisponivel > 0;
+    } catch (error) {
+      console.error("Erro ao verificar estoque:", error);
+      return false;
+    }
+  }, []);
+
+  // NOVO: Verificar estoque de todos os itens do carrinho
+  const verificarEstoqueCarrinho = useCallback(async (): Promise<{
+    todosComEstoque: boolean;
+    itensSemEstoque: Array<{ produto_id: string; variacao_id?: string }>;
+  }> => {
+    const itensSemEstoque: Array<{ produto_id: string; variacao_id?: string }> = [];
+    
+    for (const item of carrinhoGlobal) {
+      const temEstoque = await verificarEstoqueItem(
+        item.produto_id,
+        item.variacao_id || null,
+        item.quantidade
+      );
+      
+      if (!temEstoque) {
+        itensSemEstoque.push({
+          produto_id: item.produto_id,
+          variacao_id: item.variacao_id,
+        });
+      }
+    }
+    
+    return {
+      todosComEstoque: itensSemEstoque.length === 0,
+      itensSemEstoque,
+    };
+  }, [verificarEstoqueItem]);
+
   // Funções do carrinho
   const adicionarAoCarrinho = (produto: ItemCarrinho) => {
     const produtoIdParaComparar = produto.produto_id || produto.id;
@@ -139,14 +217,27 @@ export function useCarrinho() {
     atualizarCarrinho(novoCarrinho);
   };
 
-  const atualizarQuantidade = (
+  // MODIFICADO: Agora retorna um booleano indicando se a atualização foi bem-sucedida
+  const atualizarQuantidade = async (
     produtoId: string,
     variacaoId?: string,
     quantidade?: number,
-  ) => {
+  ): Promise<boolean> => {
     if (quantidade !== undefined && quantidade <= 0) {
       removerDoCarrinho(produtoId, variacaoId);
-      return;
+      return true;
+    }
+
+    // Verificar estoque antes de atualizar
+    const temEstoque = await verificarEstoqueItem(
+      produtoId,
+      variacaoId || null,
+      quantidade
+    );
+
+    if (!temEstoque) {
+      console.warn("Estoque insuficiente para:", { produtoId, variacaoId, quantidade });
+      return false;
     }
 
     const novoCarrinho = carrinhoGlobal.map((item) =>
@@ -156,6 +247,7 @@ export function useCarrinho() {
     );
 
     atualizarCarrinho(novoCarrinho);
+    return true;
   };
 
   const limparCarrinho = () => {
@@ -214,14 +306,13 @@ export function useCarrinho() {
           frete_gratis: data.frete_gratis,
           valor_minimo_frete_gratis: data.valor_minimo_frete_gratis,
           endereco: data.endereco,
-          opcoes_disponiveis: data.opcoes || [], // Salvar todas as opções
+          opcoes_disponiveis: data.opcoes || [],
         };
 
-        // Selecionar a opção mais barata como padrão (em vez do índice fixo)
+        // Selecionar a opção mais barata como padrão
         if (data.opcoes && data.opcoes.length > 0) {
-          // Ordenar por valor (menor para maior)
           const opcoesOrdenadas = [...data.opcoes].sort((a, b) => a.valor - b.valor);
-          novoFrete.opcao_selecionada = opcoesOrdenadas[0]; // Seleciona a mais barata
+          novoFrete.opcao_selecionada = opcoesOrdenadas[0];
         }
 
         atualizarFrete(novoFrete);
@@ -249,6 +340,18 @@ export function useCarrinho() {
   const limparFrete = () => {
     atualizarFrete(null);
   };
+
+  // NOVO: Verificar se o carrinho está válido para finalizar compra
+  const podeFinalizarCompra = useCallback((): boolean => {
+    // Precisa ter itens no carrinho
+    if (carrinhoGlobal.length === 0) return false;
+    
+    // Precisa ter frete calculado (com opção selecionada OU frete grátis ativo)
+    if (!freteGlobal) return false;
+    if (!freteGlobal.opcao_selecionada && !freteGlobal.frete_gratis) return false;
+    
+    return true;
+  }, []);
 
   // Cálculos
   const totalItens = carrinho.reduce((acc, item) => acc + item.quantidade, 0);
@@ -278,5 +381,9 @@ export function useCarrinho() {
     valorFrete,
     totalComFrete,
     isLoaded,
+    // Novos métodos
+    verificarEstoqueItem,
+    verificarEstoqueCarrinho,
+    podeFinalizarCompra,
   };
 }

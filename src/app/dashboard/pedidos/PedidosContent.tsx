@@ -1,4 +1,4 @@
-//src/app/dashboard/pedidos/page.tsx
+//src/app/dashboard/pedidos/PedidosContent.tsx
 "use client";
 export const dynamic = "force-dynamic";
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -893,90 +893,138 @@ export default function PedidosContent() {
   };
 
   const handleDownloadPedidoPDF = async (pedido: Pedido) => {
-    try {
-      // Buscar dados básicos primeiro
-      const { data, error } = await supabase
-        .from("pedidos")
-        .select(
-          `
+  try {
+    console.log("=== INICIANDO GERAÇÃO DE PDF PARA PEDIDO:", pedido.id);
+    console.log("Origem do pedido:", pedido.origem_pedido);
+    
+    // Buscar dados completos do pedido
+    const { data, error } = await supabase
+      .from("pedidos")
+      .select(
+        `
         *,
         cliente:clientes(*),
-        pedido_itens(*, produto:produtos(*))
-      `,
+        pedido_itens(
+          *,
+          produto:produtos(*)
         )
-        .eq("id", pedido.id)
-        .single();
+      `,
+      )
+      .eq("id", pedido.id)
+      .single();
 
-      if (error) throw error;
+    if (error) {
+      console.error("Erro ao buscar pedido:", error);
+      throw error;
+    }
 
-      // Buscar informações do pré-pedido relacionado
-      let saldoAnterior = 0;
-      let valorProdutosNovos = data.total;
-      let parcelas: any[] = [];
+    console.log("Dados do pedido encontrados:", data);
 
-      if (data.pre_pedido_id) {
-        const { data: prePedidoData } = await supabase
-          .from("pre_pedidos")
-          .select("saldo_pedido_anterior, valor_produtos_novos")
-          .eq("id", data.pre_pedido_id)
-          .single();
+    // Verificar se o pedido tem itens
+    if (!data.pedido_itens || data.pedido_itens.length === 0) {
+      console.error("Pedido sem itens:", data);
+      Swal.fire("Erro", "Este pedido não possui itens para gerar o PDF", "error");
+      return;
+    }
 
-        if (prePedidoData) {
-          saldoAnterior = prePedidoData.saldo_pedido_anterior || 0;
-          valorProdutosNovos = prePedidoData.valor_produtos_novos || data.total;
+    // Processar itens do pedido
+    const itensProcessados = data.pedido_itens.map((item: any) => {
+      // Garantir que tamanhos seja um objeto
+      let tamanhosObj = {};
+      if (item.tamanhos && typeof item.tamanhos === 'object') {
+        tamanhosObj = item.tamanhos;
+      } else if (item.tamanhos && typeof item.tamanhos === 'string') {
+        try {
+          tamanhosObj = JSON.parse(item.tamanhos);
+        } catch {
+          tamanhosObj = {};
         }
-
-        // Buscar parcelas
-        const { data: parcelasData } = await supabase
-          .from("pre_pedido_parcelas")
-          .select("*")
-          .eq("pre_pedido_id", data.pre_pedido_id)
-          .order("numero_parcela", { ascending: true });
-
-        parcelas = parcelasData || [];
       }
 
-      // Preparar dados para o PDF
-      const pdfData = {
-        cliente: data.cliente,
-        itens: data.pedido_itens.map((item: PedidoItem) => ({
-          produto: {
-            id: item.produto.id,
-            titulo: item.produto.titulo,
-            preco_prod: item.produto.preco_prod,
-            codigo: item.produto.codigo,
-            ncm: item.produto.ncm,
-            imagem_principal: item.produto.imagem_principal,
-          },
-          quantidade: item.quantidade,
-          preco_unitario: item.preco_unitario,
-          tamanhos: item.tamanhos,
-          subtotal: item.subtotal,
-          desconto: item.desconto,
-          filial: item.filial,
-          embargue: item.embargue,
-        })),
-        total: data.total,
-        observacoes: data.observacoes,
-        condicaoPagamento: data.condicao_pagamento,
-        numeroPedido: data.id,
-        vendedor_nome: data.vendedor_nome,
-        vendedor_email: data.vendedor_email,
-        vendedor_telefone: data.vendedor_telefone,
-        localTrabalho: data.local_trabalho_ped,
-        // NOVOS CAMPOS
-        pedidoAnteriorId: data.pre_pedido_id,
-        parcelas: parcelas,
-        saldoPedidoAnterior: saldoAnterior,
-        valorProdutosNovos: valorProdutosNovos,
+      return {
+        produto: {
+          id: item.produto?.id || "",
+          titulo: item.produto?.titulo || "Produto sem nome",
+          preco_prod: item.produto?.preco_prod || item.preco_unitario || 0,
+          codigo: item.produto?.codigo || "",
+          ncm: item.produto?.ncm || "",
+          imagem_principal: item.produto?.imagem_principal || "",
+        },
+        quantidade: item.quantidade || 0,
+        preco_unitario: item.preco_unitario || 0,
+        tamanhos: tamanhosObj,
+        subtotal: item.subtotal || 0,
+        desconto: item.desconto || 0,
+        filial: item.filial || "Matriz",
+        embargue: item.embargue || "Verificar com o vendedor",
       };
+    });
 
-      await generatePedidoPDF(pdfData, data.id);
-    } catch (error) {
-      console.error("Erro ao gerar PDF do pedido:", error);
-      Swal.fire("Erro", "Não foi possível gerar o PDF do pedido", "error");
+    // Buscar parcelas do pré-pedido (se houver)
+    let parcelas: any[] = [];
+    let saldoAnterior = 0;
+    let valorProdutosNovos = data.total;
+
+    if (data.pre_pedido_id) {
+      const { data: prePedidoData } = await supabase
+        .from("pre_pedidos")
+        .select("saldo_pedido_anterior, valor_produtos_novos")
+        .eq("id", data.pre_pedido_id)
+        .single();
+
+      if (prePedidoData) {
+        saldoAnterior = prePedidoData.saldo_pedido_anterior || 0;
+        valorProdutosNovos = prePedidoData.valor_produtos_novos || data.total;
+      }
+
+      const { data: parcelasData } = await supabase
+        .from("pre_pedido_parcelas")
+        .select("*")
+        .eq("pre_pedido_id", data.pre_pedido_id)
+        .order("numero_parcela", { ascending: true });
+
+      parcelas = parcelasData || [];
     }
-  };
+
+    // Preparar dados para o PDF
+    const pdfData = {
+      cliente: data.cliente,
+      itens: itensProcessados,
+      total: data.total,
+      observacoes: data.observacoes || "",
+      condicaoPagamento: data.condicao_pagamento || "À vista",
+      numeroPedido: data.id.slice(-8),
+      vendedor_nome: data.vendedor_nome || "",
+      vendedor_email: data.vendedor_email || "",
+      vendedor_telefone: data.vendedor_telefone || "",
+      localTrabalho: data.local_trabalho_ped || data.cliente?.local_trabalho || "",
+      // Campos para ecommerce
+      origem_pedido: data.origem_pedido || "dashboard",
+      tipo_checkout: data.tipo_checkout,
+      frete_valor: data.frete_valor || 0,
+      cep_entrega: data.cep_entrega,
+      opcao_frete: data.opcao_frete,
+      prazo_entrega: data.prazo_entrega,
+      payment_method: data.payment_method,
+      installments: data.installments || 1,
+      // Dados de parcelamento
+      parcelas: parcelas,
+      saldoPedidoAnterior: saldoAnterior,
+      valorProdutosNovos: valorProdutosNovos,
+      pedidoAnteriorId: data.pre_pedido_id,
+    };
+
+    console.log("Dados preparados para PDF:", pdfData);
+    
+    // Chamar a função de geração do PDF
+    await generatePedidoPDF(pdfData, data.id);
+    
+    console.log("PDF gerado com sucesso!");
+  } catch (error) {
+    console.error("Erro ao gerar PDF do pedido:", error);
+    Swal.fire("Erro", "Não foi possível gerar o PDF do pedido: " + (error instanceof Error ? error.message : "Erro desconhecido"), "error");
+  }
+};
 
   const handleCancelPrePedido = async (prePedido: PrePedido) => {
     try {
