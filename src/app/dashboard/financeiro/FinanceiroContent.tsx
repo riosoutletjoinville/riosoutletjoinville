@@ -510,7 +510,7 @@ export default function FinancePage() {
     );
   };
 
-  if (loading || loadingMovimentos)
+  { /* if (loading || loadingMovimentos)
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="animate-pulse text-center">
@@ -520,7 +520,7 @@ export default function FinancePage() {
           </p>
         </div>
       </div>
-    );
+    ); */ }
   if (!user) return null;
 
   return (
