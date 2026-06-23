@@ -1,12 +1,12 @@
-// app/dashboard/finance/page.tsx
+// app/dashboard/financeiro/page.tsx
 "use client";
 export const dynamic = "force-dynamic";
 
 import { useAuth } from "@/contexts/AuthContext";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import ParcelasManagement from "@/components/dashboard/ParcelasManagement";
+import ParcelasManagement from "@/components/dashboard/financeiro/ParcelasManagement";
 import {
   Plus,
   TrendingUp,
@@ -26,6 +26,86 @@ import {
   ArrowDownCircle,
 } from "lucide-react";
 
+// Skeleton para carregamento
+const FinanceiroSkeleton = () => (
+  <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+    <div className="mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="h-8 w-48 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+          <div className="h-4 w-64 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mt-2"></div>
+        </div>
+        <div className="flex gap-3 mt-4 sm:mt-0">
+          <div className="h-10 w-32 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+          <div className="h-10 w-40 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+        </div>
+      </div>
+    </div>
+
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+              <div className="h-8 w-32 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mt-2"></div>
+            </div>
+            <div className="p-3 bg-gray-100 dark:bg-gray-700 rounded-full">
+              <div className="h-6 w-6 bg-gray-200 dark:bg-gray-600 rounded-full"></div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+
+    <div className="mb-6">
+      <div className="border-b border-gray-200 dark:border-gray-700">
+        <div className="flex space-x-8">
+          <div className="h-10 w-40 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+          <div className="h-10 w-40 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+        </div>
+      </div>
+    </div>
+
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 mb-6">
+      <div className="flex flex-col lg:flex-row gap-4">
+        <div className="flex-1 h-12 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+        <div className="flex gap-4">
+          <div className="h-12 w-48 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+          <div className="h-12 w-12 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+        </div>
+      </div>
+    </div>
+
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-gray-50 dark:bg-gray-700">
+            <tr>
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <th key={i} className="px-6 py-4">
+                  <div className="h-4 w-16 bg-gray-200 dark:bg-gray-600 rounded animate-pulse"></div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <tr key={i} className="border-t border-gray-200 dark:border-gray-700">
+                {[1, 2, 3, 4, 5, 6].map((j) => (
+                  <td key={j} className="px-6 py-4">
+                    <div className="h-4 w-20 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+);
+
 interface MovimentoFinanceiro {
   id: string;
   tipo: string;
@@ -38,23 +118,15 @@ interface MovimentoFinanceiro {
   pedido_id?: string;
 }
 
-// Categorias atualizadas baseadas nos tipos de pedido
 const CATEGORIAS_PADRAO = [
-  // Entradas
   { value: "vendas", label: "Vendas", tipo: "entrada" },
   { value: "orcamentos", label: "Orçamentos", tipo: "entrada" },
   { value: "trocas_entrada", label: "Trocas (Entrada)", tipo: "entrada" },
   { value: "recebimentos", label: "Recebimentos", tipo: "entrada" },
   { value: "investimentos", label: "Investimentos", tipo: "entrada" },
   { value: "outras_entradas", label: "Outras Entradas", tipo: "entrada" },
-
-  // Saídas
   { value: "compras", label: "Compras", tipo: "saida" },
-  {
-    value: "despesas_operacionais",
-    label: "Despesas Operacionais",
-    tipo: "saida",
-  },
+  { value: "despesas_operacionais", label: "Despesas Operacionais", tipo: "saida" },
   { value: "folha_pagamento", label: "Folha de Pagamento", tipo: "saida" },
   { value: "impostos", label: "Impostos", tipo: "saida" },
   { value: "estornos", label: "Estornos", tipo: "saida" },
@@ -76,26 +148,22 @@ export default function FinancePage() {
   const router = useRouter();
   const [movimentos, setMovimentos] = useState<MovimentoFinanceiro[]>([]);
   const [loadingMovimentos, setLoadingMovimentos] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [showModal, setShowModal] = useState(false);
-  const [filtroTipo, setFiltroTipo] = useState<"todos" | "entrada" | "saida">(
-    "todos",
-  );
-  const [editingMovimento, setEditingMovimento] =
-    useState<MovimentoFinanceiro | null>(null);
+  const [filtroTipo, setFiltroTipo] = useState<"todos" | "entrada" | "saida">("todos");
+  const [editingMovimento, setEditingMovimento] = useState<MovimentoFinanceiro | null>(null);
   const [saving, setSaving] = useState(false);
   const [showCleanupAlert, setShowCleanupAlert] = useState(false);
-  const [activeTab, setActiveTab] = useState<"movimentos" | "parcelas">(
-    "movimentos",
-  );
+  const [activeTab, setActiveTab] = useState<"movimentos" | "parcelas">("movimentos");
   const [valorFormatado, setValorFormatado] = useState("");
-
-  // Estados de paginação
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [totalItems, setTotalItems] = useState(0);
+  const [silentLoading, setSilentLoading] = useState(false);
+  const isRefreshing = useRef(false);
+  const loadMovimentosRef = useRef<((isSilent?: boolean) => Promise<void>) | null>(null);
 
-  // Função para formatar moeda
   const formatarMoeda = (valor: number): string => {
     return new Intl.NumberFormat("pt-BR", {
       style: "currency",
@@ -103,12 +171,7 @@ export default function FinancePage() {
     }).format(valor);
   };
 
-  // Função para obter descrição padrão
-  const getDescricaoPadrao = (
-    tipo: string,
-    categoria: string,
-    pedidoId?: string,
-  ): string => {
+  const getDescricaoPadrao = (tipo: string, categoria: string, pedidoId?: string): string => {
     if (pedidoId) {
       return `Venda - Pedido ${pedidoId}`;
     }
@@ -130,12 +193,17 @@ export default function FinancePage() {
     );
   };
 
-  // Função para carregar movimentos
-  const loadMovimentos = useCallback(async () => {
-    try {
-      setLoadingMovimentos(true);
+  const loadMovimentos = useCallback(async (isSilent = false) => {
+    if (isRefreshing.current) return;
+    isRefreshing.current = true;
 
-      // Query para contar o total
+    if (!isSilent) {
+      setLoadingMovimentos(true);
+    } else {
+      setSilentLoading(true);
+    }
+
+    try {
       let countQuery = supabase
         .from("financeiro")
         .select("*", { count: "exact", head: true });
@@ -154,7 +222,6 @@ export default function FinancePage() {
       if (countError) throw countError;
       setTotalItems(count || 0);
 
-      // Query para buscar dados
       let query = supabase
         .from("financeiro")
         .select("*")
@@ -170,7 +237,6 @@ export default function FinancePage() {
         );
       }
 
-      // Aplicar paginação CORRETAMENTE
       const from = (currentPage - 1) * itemsPerPage;
       const to = from + itemsPerPage - 1;
 
@@ -185,10 +251,16 @@ export default function FinancePage() {
       console.error("Erro ao carregar movimentos:", error);
     } finally {
       setLoadingMovimentos(false);
+      setSilentLoading(false);
+      isRefreshing.current = false;
+      setIsInitialLoad(false);
     }
   }, [filtroTipo, currentPage, itemsPerPage, searchTerm]);
 
-  // Função para manipular mudança no valor (máscara monetária)
+  useEffect(() => {
+    loadMovimentosRef.current = loadMovimentos;
+  }, [loadMovimentos]);
+
   const handleValorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const valor = e.target.value.replace(/\D/g, "");
     const valorNumerico = Number(valor) / 100;
@@ -204,27 +276,70 @@ export default function FinancePage() {
     }
   }, [user, loading, router]);
 
+  // ⭐ CARREGAMENTO INICIAL - IGUAL AO PARCELAS MANAGEMENT
   useEffect(() => {
-    if (user) {
-      loadMovimentos();
+    if (user && isInitialLoad) {
+      loadMovimentos(false);
     }
-  }, [user, loadMovimentos]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
-  // Função para buscar quando o usuário digitar no search
-  useEffect(() => {
-    if (user) {
-      const timer = setTimeout(() => {
-        setCurrentPage(1);
-        loadMovimentos();
-      }, 500);
+  // ⭐ REMOVIDO O useEffect QUE CAUSAVA RECARREGAMENTO AUTOMÁTICO
+  // Agora as ações são acionadas MANUALMENTE pelo usuário
 
-      return () => clearTimeout(timer);
+  // ⭐ FUNÇÃO PARA BUSCAR - ACIONADA MANUALMENTE
+  const handleBuscar = () => {
+    setCurrentPage(1);
+    if (loadMovimentosRef.current) {
+      loadMovimentosRef.current(false);
     }
-  }, [searchTerm, filtroTipo, user]);
+  };
 
-  // Função para exportar relatório
+  // ⭐ FUNÇÃO PARA FILTRAR - ACIONADA MANUALMENTE
+  const handleFiltrar = (value: "todos" | "entrada" | "saida") => {
+    setFiltroTipo(value);
+    setCurrentPage(1);
+    if (loadMovimentosRef.current) {
+      loadMovimentosRef.current(false);
+    }
+  };
+
+  // ⭐ FUNÇÃO PARA LIMPAR FILTROS - ACIONADA MANUALMENTE
+  const handleLimparFiltros = () => {
+    setSearchTerm("");
+    setFiltroTipo("todos");
+    setCurrentPage(1);
+    if (loadMovimentosRef.current) {
+      loadMovimentosRef.current(false);
+    }
+  };
+
+  const handlePageChange = (page: number) => {
+    if (page < 1) return;
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    if (page > totalPages) return;
+    if (page === currentPage) return;
+    if (isRefreshing.current) return;
+
+    setCurrentPage(page);
+    setTimeout(() => {
+      if (loadMovimentosRef.current) {
+        loadMovimentosRef.current(true);
+      }
+    }, 0);
+  };
+
+  const handleItemsPerPageChange = (value: number) => {
+    setItemsPerPage(value);
+    setCurrentPage(1);
+    setTimeout(() => {
+      if (loadMovimentosRef.current) {
+        loadMovimentosRef.current(false);
+      }
+    }, 0);
+  };
+
   const exportarRelatorio = () => {
-    // Cabeçalho com BOM para UTF-8
     const BOM = "\uFEFF";
     const csvContent = [
       ["Data", "Descrição", "Categoria", "Tipo", "Valor", "ID Pedido"],
@@ -279,7 +394,6 @@ export default function FinancePage() {
       return;
 
     try {
-      // Buscar todos os registros com pedido_id duplicado
       const { data: duplicates, error: dupError } = await supabase
         .from("financeiro")
         .select("*")
@@ -287,7 +401,6 @@ export default function FinancePage() {
 
       if (dupError) throw dupError;
 
-      // Agrupar por pedido_id e manter apenas o mais recente
       const recordsToKeep = new Map();
       const recordsToDelete: string[] = [];
 
@@ -308,7 +421,6 @@ export default function FinancePage() {
         }
       });
 
-      // Deletar registros duplicados
       if (recordsToDelete.length > 0) {
         const { error: deleteError } = await supabase
           .from("financeiro")
@@ -320,7 +432,7 @@ export default function FinancePage() {
 
       alert(`${recordsToDelete.length} registros duplicados foram removidos.`);
       setShowCleanupAlert(false);
-      loadMovimentos();
+      loadMovimentos(false);
     } catch (error) {
       console.error("Erro ao limpar registros duplicados:", error);
       alert("Erro ao limpar registros duplicados.");
@@ -353,7 +465,6 @@ export default function FinancePage() {
     const tipo = formData.get("tipo") as string;
     const categoria = formData.get("categoria") as string;
 
-    // Verificar se o pedido_id já existe (apenas para novos registros)
     if (!editingMovimento && pedidoId) {
       const pedidoExists = await checkPedidoExists(pedidoId);
       if (pedidoExists) {
@@ -363,7 +474,6 @@ export default function FinancePage() {
       }
     }
 
-    // Obter valor numérico (remover formatação de moeda)
     const valorInput = valorFormatado || (formData.get("valor") as string);
     const valorNumerico = parseFloat(
       valorInput.replace(/[^\d,-]/g, "").replace(",", "."),
@@ -380,10 +490,6 @@ export default function FinancePage() {
       data_movimento: formData.get("data_movimento") as string,
       pedido_id: pedidoId || null,
     };
-
-    console.log("Data original:", movimentoData.data_movimento);
-    console.log("Data após split:", movimentoData.data_movimento?.split("-"));
-    console.log("Data formatada:", formatDate(movimentoData.data_movimento));
 
     try {
       let error;
@@ -402,7 +508,7 @@ export default function FinancePage() {
       setShowModal(false);
       setEditingMovimento(null);
       setValorFormatado("");
-      loadMovimentos();
+      loadMovimentos(false);
     } catch (error) {
       console.error("Erro ao salvar movimento:", error);
       alert(
@@ -421,7 +527,7 @@ export default function FinancePage() {
 
       if (error) throw error;
 
-      loadMovimentos();
+      loadMovimentos(false);
     } catch (error) {
       console.error("Erro ao excluir movimento:", error);
     }
@@ -447,15 +553,11 @@ export default function FinancePage() {
     m.categoria.toLowerCase().includes("estorno"),
   );
 
-  // Para o total de saídas, some apenas as saídas que NÃO são estornos
   const totalEntradas = movimentosEntrada.reduce((sum, m) => sum + m.valor, 0);
   const totalSaidas = movimentosSaida.reduce((sum, m) => sum + m.valor, 0);
   const totalEstornos = movimentosEstorno.reduce((sum, m) => sum + m.valor, 0);
-
-  // O saldo deve considerar: entradas - (saídas normais + estornos)
   const saldo = totalEntradas - (totalSaidas + totalEstornos);
 
-  // Componente de Paginação
   const Pagination = () => {
     const totalPages = Math.ceil(totalItems / itemsPerPage);
 
@@ -474,8 +576,7 @@ export default function FinancePage() {
           <select
             value={itemsPerPage}
             onChange={(e) => {
-              setItemsPerPage(Number(e.target.value));
-              setCurrentPage(1);
+              handleItemsPerPageChange(Number(e.target.value));
             }}
             className="border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           >
@@ -485,7 +586,7 @@ export default function FinancePage() {
           </select>
 
           <button
-            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+            onClick={() => handlePageChange(currentPage - 1)}
             disabled={currentPage === 1}
             className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-sm disabled:opacity-50 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600"
           >
@@ -497,9 +598,7 @@ export default function FinancePage() {
           </span>
 
           <button
-            onClick={() =>
-              setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-            }
+            onClick={() => handlePageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
             className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-sm disabled:opacity-50 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600"
           >
@@ -510,17 +609,14 @@ export default function FinancePage() {
     );
   };
 
-  { /* if (loading || loadingMovimentos)
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="animate-pulse text-center">
-          <DollarSign className="h-12 w-12 text-blue-600 dark:text-blue-400 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400">
-            Carregando dados financeiros...
-          </p>
-        </div>
-      </div>
-    ); */ }
+  if (isInitialLoad && loadingMovimentos) {
+    return <FinanceiroSkeleton />;
+  }
+
+  if (loading) {
+    return <FinanceiroSkeleton />;
+  }
+
   if (!user) return null;
 
   return (
@@ -713,6 +809,11 @@ export default function FinancePage() {
                   placeholder="Buscar por descrição ou categoria..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleBuscar();
+                    }
+                  }}
                   className="pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
@@ -720,10 +821,7 @@ export default function FinancePage() {
                 <select
                   value={filtroTipo}
                   onChange={(e) => {
-                    setFiltroTipo(
-                      e.target.value as "todos" | "entrada" | "saida",
-                    );
-                    setCurrentPage(1);
+                    handleFiltrar(e.target.value as "todos" | "entrada" | "saida");
                   }}
                   className="px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
@@ -732,14 +830,16 @@ export default function FinancePage() {
                   <option value="saida">Saídas</option>
                 </select>
                 <button
-                  onClick={() => {
-                    setSearchTerm("");
-                    setFiltroTipo("todos");
-                    setCurrentPage(1);
-                  }}
+                  onClick={handleLimparFiltros}
                   className="px-4 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
                 >
                   <Filter size={20} />
+                </button>
+                <button
+                  onClick={handleBuscar}
+                  className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Search size={20} />
                 </button>
               </div>
             </div>
