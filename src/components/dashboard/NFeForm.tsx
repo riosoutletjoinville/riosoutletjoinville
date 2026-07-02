@@ -222,6 +222,7 @@ export function NFeForm({ configFiscal, onSuccess }: NFeFormProps) {
 
   function possuiNotaFiscal(pedido: any) {
     return pedido.notas_fiscais && pedido.notas_fiscais.length > 0;
+    return pedido.notas_fiscais.some((nota: any) => nota.status !== "cancelada");
   }
 
   function getStatusNota(pedido: any) {
