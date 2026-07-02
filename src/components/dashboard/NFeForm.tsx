@@ -221,9 +221,13 @@ export function NFeForm({ configFiscal, onSuccess }: NFeFormProps) {
   }, [busca, tipoBusca, paginaAtual]);
 
   function possuiNotaFiscal(pedido: any) {
-    return pedido.notas_fiscais && pedido.notas_fiscais.length > 0;
-    return pedido.notas_fiscais.some((nota: any) => nota.status !== "cancelada");
+  if (!pedido.notas_fiscais || pedido.notas_fiscais.length === 0) {
+    return false;
   }
+  
+  // Verifica se existe alguma nota que NÃO está cancelada
+  return pedido.notas_fiscais.some((nota: any) => nota.status !== "cancelada");
+}
 
   function getStatusNota(pedido: any) {
     if (!possuiNotaFiscal(pedido)) return null;
