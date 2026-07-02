@@ -1,4 +1,4 @@
-// src/app/api/nfe/emitir/route.ts - VERSÃO COMPLETA COM DUPLICATAS
+// src/app/api/nfe/emitir/route.ts - VERSÃO CORRIGIDA
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
@@ -27,13 +27,16 @@ export async function POST(request: NextRequest) {
       },
     );
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    // 🔴 ALTERAÇÃO AQUI - Usar getUser() em vez de getSession()
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-    if (!session) {
+    if (userError || !user) {
+      console.error("❌ Erro ao autenticar usuário:", userError);
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
+
+    // Usar user.id em vez de session.user.id
+    console.log("✅ Usuário autenticado:", user.id);
 
     const body = await request.json();
     const { pedido_id, automatica = false } = body;
@@ -100,13 +103,13 @@ export async function POST(request: NextRequest) {
     if (!empresaId) {
       console.log(
         "⚠️ Pedido sem empresa_id, buscando do usuário:",
-        session.user.id,
+        user.id, // ← ALTERADO: user.id em vez de session.user.id
       );
 
       const { data: userData } = await supabase
         .from("usuarios")
         .select("empresa_id")
-        .eq("id", session.user.id)
+        .eq("id", user.id) // ← ALTERADO: user.id em vez de session.user.id
         .single();
 
       if (userData?.empresa_id) {
@@ -268,7 +271,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-       // ===== CONSTRUIR DUPLICATAS E FATURA =====
+    // ===== CONSTRUIR DUPLICATAS E FATURA =====
     const duplicatas = [];
     let somaParcelas = 0;
 
@@ -295,119 +298,110 @@ export async function POST(request: NextRequest) {
         });
       }
     }
-// ANTES de enviar para Focus
-console.log("🔍 DUPLICATAS SENDO ENVIADAS:", JSON.stringify({
-  numero_fatura: numeroNFe.toString().padStart(9, "0"),
-  valor_original_fatura: Number(valorTotal).toFixed(2),
-  duplicatas: duplicatas.map(dup => ({
-    nDup: dup.nDup,
-    dVenc: dup.dVenc,
-    vDup: parseFloat(dup.vDup).toFixed(2)
-  }))
-}, null, 2));
-    // ===== MONTAR PAYLOAD PARA FOCUS NFe (CORRETO SEGUNDO DOCUMENTAÇÃO) =====
-    // ===== MONTAR PAYLOAD PARA FOCUS NFe (CORRETO SEGUNDO DOCUMENTAÇÃO) =====
-const dadosFocus: any = {
-  natureza_operacao: "VENDA DE MERCADORIA",
-  data_emissao: new Date().toISOString().split("T")[0],
-  tipo_documento: "1",
-  finalidade_emissao: "1",
-  numero: numeroNFe,
-  serie: configFiscal.serie_nfe,
 
-  cnpj_emitente: configFiscal.emitente_cnpj.replace(/\D/g, ""),
-  inscricao_estadual_emitente: configFiscal.emitente_ie || "",
+    // ANTES de enviar para Focus
+    console.log("🔍 DUPLICATAS SENDO ENVIADAS:", JSON.stringify({
+      numero_fatura: numeroNFe.toString().padStart(9, "0"),
+      valor_original_fatura: Number(valorTotal).toFixed(2),
+      duplicatas: duplicatas.map(dup => ({
+        nDup: dup.nDup,
+        dVenc: dup.dVenc,
+        vDup: parseFloat(dup.vDup).toFixed(2)
+      }))
+    }, null, 2));
 
-  // Destinatário
-  nome_destinatario: (cliente.nome || cliente.razao_social || "CONSUMIDOR FINAL").substring(0, 60),
-  logradouro_destinatario: (cliente.endereco || "NAO INFORMADO").substring(0, 60),
-  numero_destinatario: (cliente.numero || "S/N").substring(0, 10),
-  bairro_destinatario: (cliente.bairro || "CENTRO").substring(0, 60),
-  municipio_destinatario: (cliente.cidade || "Joinville").substring(0, 60),
-  uf_destinatario: ufDestinatario,
-  cep_destinatario: (cliente.cep || "").replace(/\D/g, "") || "89209000",
-  pais_destinatario: "Brasil",
-  telefone_destinatario: cliente.telefone?.replace(/\D/g, "") || "",
+    // ===== MONTAR PAYLOAD PARA FOCUS NFe =====
+    const dadosFocus: any = {
+      natureza_operacao: "VENDA DE MERCADORIA",
+      data_emissao: new Date().toISOString().split("T")[0],
+      tipo_documento: "1",
+      finalidade_emissao: "1",
+      numero: numeroNFe,
+      serie: configFiscal.serie_nfe,
 
-  // CPF ou CNPJ do destinatário
-  ...(cliente.cpf ? { cpf_destinatario: cliente.cpf.replace(/\D/g, "") } : {}),
-  ...(cliente.cnpj ? { cnpj_destinatario: cliente.cnpj.replace(/\D/g, "") } : {}),
+      cnpj_emitente: configFiscal.emitente_cnpj.replace(/\D/g, ""),
+      inscricao_estadual_emitente: configFiscal.emitente_ie || "",
 
-  // Valores
-  valor_total: Number(valorTotal).toFixed(2),
-  valor_produtos: Number(somaProdutos).toFixed(2),
-  valor_frete: Number(valorFrete).toFixed(2),
-  valor_seguro: "0.00",
-  modalidade_frete: "0",
+      // Destinatário
+      nome_destinatario: (cliente.nome || cliente.razao_social || "CONSUMIDOR FINAL").substring(0, 60),
+      logradouro_destinatario: (cliente.endereco || "NAO INFORMADO").substring(0, 60),
+      numero_destinatario: (cliente.numero || "S/N").substring(0, 10),
+      bairro_destinatario: (cliente.bairro || "CENTRO").substring(0, 60),
+      municipio_destinatario: (cliente.cidade || "Joinville").substring(0, 60),
+      uf_destinatario: ufDestinatario,
+      cep_destinatario: (cliente.cep || "").replace(/\D/g, "") || "89209000",
+      pais_destinatario: "Brasil",
+      telefone_destinatario: cliente.telefone?.replace(/\D/g, "") || "",
 
-  // Itens
-  items: pedido.itens.map((item: any, idx: number) => {
-    const valorItem = item.preco_unitario * item.quantidade;
-    const codigoProduto = (item.produto?.modelo_prod || item.produto?.modelo || item.produto?.id || "0001").substring(0, 60);
-    const descricaoProduto = (item.produto?.titulo || "Produto").substring(0, 120);
-    const ncmProduto = item.produto?.ncm || "64029990";
+      // CPF ou CNPJ do destinatário
+      ...(cliente.cpf ? { cpf_destinatario: cliente.cpf.replace(/\D/g, "") } : {}),
+      ...(cliente.cnpj ? { cnpj_destinatario: cliente.cnpj.replace(/\D/g, "") } : {}),
 
-    return {
-      numero_item: (idx + 1).toString(),
-      codigo_produto: codigoProduto,
-      descricao: descricaoProduto,
-      cfop: cfop,
-      unidade_comercial: "UN",
-      quantidade_comercial: Number(item.quantidade).toFixed(4),
-      valor_unitario_comercial: Number(item.preco_unitario).toFixed(4),
-      valor_bruto: valorItem.toFixed(2),
-      unidade_tributavel: "UN",
-      quantidade_tributavel: Number(item.quantidade).toFixed(4),
-      valor_unitario_tributavel: Number(item.preco_unitario).toFixed(4),
-      codigo_ncm: ncmProduto,
-      icms_situacao_tributaria: csosn,
-      icms_origem: "0",
-      pis_situacao_tributaria: "99",
-      cofins_situacao_tributaria: "99",
+      // Valores
+      valor_total: Number(valorTotal).toFixed(2),
+      valor_produtos: Number(somaProdutos).toFixed(2),
+      valor_frete: Number(valorFrete).toFixed(2),
+      valor_seguro: "0.00",
+      modalidade_frete: "0",
+
+      // Itens
+      items: pedido.itens.map((item: any, idx: number) => {
+        const valorItem = item.preco_unitario * item.quantidade;
+        const codigoProduto = (item.produto?.modelo_prod || item.produto?.modelo || item.produto?.id || "0001").substring(0, 60);
+        const descricaoProduto = (item.produto?.titulo || "Produto").substring(0, 120);
+        const ncmProduto = item.produto?.ncm || "64029990";
+
+        return {
+          numero_item: (idx + 1).toString(),
+          codigo_produto: codigoProduto,
+          descricao: descricaoProduto,
+          cfop: cfop,
+          unidade_comercial: "UN",
+          quantidade_comercial: Number(item.quantidade).toFixed(4),
+          valor_unitario_comercial: Number(item.preco_unitario).toFixed(4),
+          valor_bruto: valorItem.toFixed(2),
+          unidade_tributavel: "UN",
+          quantidade_tributavel: Number(item.quantidade).toFixed(4),
+          valor_unitario_tributavel: Number(item.preco_unitario).toFixed(4),
+          codigo_ncm: ncmProduto,
+          icms_situacao_tributaria: csosn,
+          icms_origem: "0",
+          pis_situacao_tributaria: "99",
+          cofins_situacao_tributaria: "99",
+        };
+      }),
+
+      // ESTRUTURA DE FATURA/DUPLICATAS (FORMATO CORRETO FOCUS)
+      cobr: {
+        fat: {
+          nFat: numeroNFe.toString().padStart(9, "0"),
+          vOrig: Number(valorTotal).toFixed(2),
+          vDesc: "0.00",
+          vLiq: Number(valorTotal).toFixed(2)
+        },
+        dup: duplicatas.map(dup => ({
+          nDup: dup.nDup,
+          dVenc: dup.dVenc,
+          vDup: dup.vDup
+        }))
+      },
+
+      // Formas de pagamento
+      formas_pagamento: formasPagamento,
     };
-  }),
 
-  // ===== ESTRUTURA DE FATURA/DUPLICATAS (FORMATO CORRETO FOCUS) =====
-  cobr: {
-  fat: {
-    nFat: numeroNFe.toString().padStart(9, "0"),
-    vOrig: Number(valorTotal).toFixed(2),
-    vDesc: "0.00",
-    vLiq: Number(valorTotal).toFixed(2)
-  },
-  dup: duplicatas.map(dup => ({
-    nDup: dup.nDup,
-    dVenc: dup.dVenc,
-    vDup: dup.vDup  // já está como string com 2 decimais
-  }))
-},
+    // ADICIONAR INFORMAÇÕES DAS PARCELAS NA OBSERVAÇÃO
+    if (parcelas && parcelas.length > 0) {
+      const infoParcelas = parcelas.map((p, idx) => {
+        const valor = Number(p.valor_parcela).toFixed(2);
+        const venc = new Date(p.data_vencimento).toLocaleDateString('pt-BR');
+        return `${idx+1}ª parcela: R$ ${valor} venc: ${venc}`;
+      }).join('; ');
+      
+      dadosFocus.informacoes_adicionais_contribuinte = `Condição de pagamento: ${parcelas.length}x sem juros. ${infoParcelas}`;
+    }
 
-  // Formas de pagamento
-  formas_pagamento: formasPagamento,
-};
-
-// ===== ADICIONAR INFORMAÇÕES DAS PARCELAS NA OBSERVAÇÃO =====
-if (parcelas && parcelas.length > 0) {
-  const infoParcelas = parcelas.map((p, idx) => {
-    const valor = Number(p.valor_parcela).toFixed(2);
-    const venc = new Date(p.data_vencimento).toLocaleDateString('pt-BR');
-    return `${idx+1}ª parcela: R$ ${valor} venc: ${venc}`;
-  }).join('; ');
-  
-  dadosFocus.informacoes_adicionais_contribuinte = `Condição de pagamento: ${parcelas.length}x sem juros. ${infoParcelas}`;
-}
-
-console.log("📦 Dados Focus enviados (corrigido):", JSON.stringify(dadosFocus, null, 2));
-
-    console.log(
-      "📦 Dados Focus enviados (corrigido):",
-      JSON.stringify(dadosFocus, null, 2),
-    );
-
-    console.log(
-      "📦 Dados Focus enviados:",
-      JSON.stringify(dadosFocus, null, 2),
-    );
+    console.log("📦 Dados Focus enviados (corrigido):", JSON.stringify(dadosFocus, null, 2));
 
     // 5. Enviar para Focus NFe
     const focusClient = new FocusNFeClient(
