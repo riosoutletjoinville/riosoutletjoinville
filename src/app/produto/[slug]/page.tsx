@@ -1,5 +1,4 @@
 // app/produto/[slug]/page.tsx
-"use client";
 import { supabase } from "@/lib/supabase";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -11,7 +10,7 @@ import { ProductStructuredData } from "@/components/seo/StructuredData";
 import SimpleHeader from "@/components/ui/SimpleHeader";
 import ExpandableText from "@/components/ui/ExpandableText";
 import React from "react";
-import { usePixelEvents } from "@/hooks/usePixelEvents"; // ADICIONADO
+import { ProductViewTracker } from "./ProductViewTracker";
 
 // ========== INTERFACES PARA TIPAGEM ==========
 interface CategoriaPai {
@@ -111,25 +110,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-// COMPONENTE DE TRACKING - ADICIONADO
-function ProductViewTracker({ produto }: { produto: Produto }) {
-  const { trackProductView } = usePixelEvents();
-
-  React.useEffect(() => {
-    if (produto) {
-      trackProductView({
-        id: produto.id,
-        name: produto.titulo,
-        category: produto.categoria?.nome,
-        brand: produto.marca?.nome,
-        price: produto.preco,
-        currency: 'BRL',
-      });
-    }
-  }, [produto]);
-
-  return null;
-}
 
 export default async function ProdutoPage({ params }: Props) {
   const { slug } = await params;
@@ -231,7 +211,7 @@ export default async function ProdutoPage({ params }: Props) {
       <ProductStructuredData product={structuredDataProduct} />
       
       {/* TRACKER DE VISUALIZAÇÃO DE PRODUTO - ADICIONADO */}
-      <ProductViewTracker produto={produtoTyped} />
+      <ProductViewTracker product={produtoTyped} />
       
       <SimpleHeader />
       <div className="min-h-screen bg-gray-50">
