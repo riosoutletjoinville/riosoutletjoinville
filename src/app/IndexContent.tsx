@@ -1,4 +1,4 @@
-// src/app/page.tsx
+// src/app/IndexContent.tsx
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
@@ -17,6 +17,7 @@ import Header from "@/components/template/header";
 import Footer from "@/components/template/Footer";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { useRouter, usePathname } from "next/navigation";
+import { usePixelEvents } from "@/hooks/usePixelEvents";
 import {
   Truck,
   Shield,
@@ -174,7 +175,7 @@ function ProdutosGrid({
                       OFERTA
                     </span>
                   )}
-              </div>              
+              </div>
             </Link>
 
             {/* Informações do Produto */}
@@ -367,6 +368,8 @@ function HomeContent() {
   const [loading, setLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
 
+  const { trackAddToCart } = usePixelEvents();
+
   interface Banner {
     id: string;
     titulo: string;
@@ -464,6 +467,19 @@ function HomeContent() {
   }, [pageParam]);
 
   const handleComprar = (produto: Produto) => {
+    trackAddToCart(
+      {
+        id: produto.id,
+        titulo: produto.titulo,
+        name: produto.titulo,
+        preco: produto.preco,
+        price: produto.preco,
+        categoria: produto.categoria,
+        marca: produto.marca,
+      },
+      1,
+    );
+    
     const imagemPrincipal =
       produto.imagens?.find((img) => img.principal) || produto.imagens?.[0];
 

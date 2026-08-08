@@ -10,7 +10,7 @@ import { ProductStructuredData } from "@/components/seo/StructuredData";
 import SimpleHeader from "@/components/ui/SimpleHeader";
 import ExpandableText from "@/components/ui/ExpandableText";
 import React from "react";
-import { ProductViewTracker } from "./ProductViewTracker";
+import { usePixelEvents } from "@/hooks/usePixelEvents"; // ADICIONADO
 
 // ========== INTERFACES PARA TIPAGEM ==========
 interface CategoriaPai {
@@ -108,6 +108,26 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description:
       produto.descricao || `Confira detalhes do produto ${produto.titulo}`,
   };
+}
+
+// COMPONENTE DE TRACKING - ADICIONADO
+function ProductViewTracker({ produto }: { produto: Produto }) {
+  const { trackProductView } = usePixelEvents();
+
+  React.useEffect(() => {
+    if (produto) {
+      trackProductView({
+        id: produto.id,
+        name: produto.titulo,
+        category: produto.categoria?.nome,
+        brand: produto.marca?.nome,
+        price: produto.preco,
+        currency: 'BRL',
+      });
+    }
+  }, [produto]);
+
+  return null;
 }
 
 export default async function ProdutoPage({ params }: Props) {
@@ -208,7 +228,10 @@ export default async function ProdutoPage({ params }: Props) {
     <>
       {/* Dados estruturados para SEO */}
       <ProductStructuredData product={structuredDataProduct} />
-      <ProductViewTracker product={produtoTyped} />
+      
+      {/* TRACKER DE VISUALIZAÇÃO DE PRODUTO - ADICIONADO */}
+      <ProductViewTracker produto={produtoTyped} />
+      
       <SimpleHeader />
       <div className="min-h-screen bg-gray-50">
         {/* Breadcrumb */}
