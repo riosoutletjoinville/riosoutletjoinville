@@ -103,6 +103,54 @@ export default function ParcelasManagement() {
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [itensPorPagina, setItensPorPagina] = useState(10);
 
+  // ✅ FUNÇÃO UTILITÁRIA: Obtém a data atual no formato YYYY-MM-DD sem perder 1 dia
+  const obterDataAtualFormatada = (): string => {
+    const agora = new Date();
+    // Ajusta para o timezone local (Brasil)
+    const dataAjustada = new Date(
+      agora.getTime() + agora.getTimezoneOffset() * 60000,
+    );
+    const ano = dataAjustada.getFullYear();
+    const mes = String(dataAjustada.getMonth() + 1).padStart(2, "0");
+    const dia = String(dataAjustada.getDate()).padStart(2, "0");
+    return `${ano}-${mes}-${dia}`;
+  };
+
+  // ✅ FUNÇÃO UTILITÁRIA: Compara duas datas considerando apenas dia/mês/ano
+  const compararDatas = (data1: string, data2: string): number => {
+    // Remove a parte da hora e ajusta para timezone local
+    const d1 = new Date(data1);
+    const d2 = new Date(data2);
+
+    // Ajusta para timezone local
+    const d1Ajustada = new Date(d1.getTime() + d1.getTimezoneOffset() * 60000);
+    const d2Ajustada = new Date(d2.getTime() + d2.getTimezoneOffset() * 60000);
+
+    // Compara apenas ano, mês, dia
+    const ano1 = d1Ajustada.getFullYear();
+    const mes1 = d1Ajustada.getMonth();
+    const dia1 = d1Ajustada.getDate();
+    const ano2 = d2Ajustada.getFullYear();
+    const mes2 = d2Ajustada.getMonth();
+    const dia2 = d2Ajustada.getDate();
+
+    if (ano1 !== ano2) return ano1 - ano2;
+    if (mes1 !== mes2) return mes1 - mes2;
+    return dia1 - dia2;
+  };
+
+  // ✅ FUNÇÃO UTILITÁRIA: Verifica se uma data está atrasada
+  const isDataAtrasada = (dataVencimento: string): boolean => {
+    const dataAtual = obterDataAtualFormatada();
+    return compararDatas(dataVencimento, dataAtual) < 0;
+  };
+
+  // ✅ FUNÇÃO UTILITÁRIA: Verifica se uma data está pendente (não atrasada)
+  const isDataPendente = (dataVencimento: string): boolean => {
+    const dataAtual = obterDataAtualFormatada();
+    return compararDatas(dataVencimento, dataAtual) >= 0;
+  };
+
   // Função para obter nome do cliente
   const getClienteNome = useCallback((cliente: Cliente) => {
     if (!cliente) return "Cliente não encontrado";
@@ -145,6 +193,28 @@ export default function ParcelasManagement() {
     }
   };
 
+const [updateKey, setUpdateKey] = useState(0);
+
+useEffect(() => {
+  if (!clienteSelecionado) return;
+  if (parcelas.length === 0) return;
+
+  const parcelasAtualizadas = parcelas.filter(
+    (p) => p.pre_pedido?.cliente?.id === clienteSelecionado.id
+  );
+
+  if (parcelasAtualizadas.length > 0) {
+    setParcelasClienteSelecionado(parcelasAtualizadas);
+    const primeiraParcela = parcelasAtualizadas[0];
+    if (primeiraParcela) {
+      setPrePedidoId(primeiraParcela.pre_pedido_id);
+      setTotalPedido(primeiraParcela.pre_pedido?.total || 0);
+    }
+    // ✅ FORÇAR ATUALIZAÇÃO DA KEY
+    setUpdateKey(prev => prev + 1);
+  }
+}, [parcelas, clienteSelecionado]);
+
   // Método para registrar pagamento parcial
   const handlePagamentoParcial = async (parcela: Parcela) => {
     setModalAberto(false);
@@ -152,110 +222,116 @@ export default function ParcelasManagement() {
     setModalPagamentoAberto(true);
   };
 
-  const handleConfirmarPagamentoParcial = async (data: {
-    valorPagamento: number;
-    formaPagamento: string;
-    dataPagamento: string;
-    observacao: string;
-  }) => {
-    if (!parcelaSelecionada) return;
+ const handleConfirmarPagamentoParcial = async (data: {
+  valorPagamento: number;
+  formaPagamento: string;
+  dataPagamento: string;
+  observacao: string;
+}) => {
+  if (!parcelaSelecionada) return;
 
-    try {
-      // Buscar dados atuais da parcela
-      const { data: parcelaAtual, error: fetchError } = await supabase
-        .from("pre_pedido_parcelas")
-        .select("valor_parcela, saldo_restante, valor_pago, status")
-        .eq("id", parcelaSelecionada.id)
-        .single();
+  try {
+    const { data: parcelaAtual, error: fetchError } = await supabase
+      .from("pre_pedido_parcelas")
+      .select("valor_parcela, saldo_restante, valor_pago, status")
+      .eq("id", parcelaSelecionada.id)
+      .single();
 
-      if (fetchError) {
-        console.error("Erro ao buscar parcela:", fetchError);
-        throw fetchError;
-      }
-
-      const saldoAtual =
-        parcelaAtual.saldo_restante ?? parcelaAtual.valor_parcela;
-      const novoValorPago =
-        (parcelaAtual.valor_pago || 0) + data.valorPagamento;
-      const novoSaldoRestante = saldoAtual - data.valorPagamento;
-      const novoStatus = novoSaldoRestante <= 0 ? "pago" : "parcial";
-
-      // Registrar o pagamento na tabela parcela_pagamentos
-      const { error: pagamentoError } = await supabase
-        .from("parcela_pagamentos")
-        .insert([
-          {
-            parcela_id: parcelaSelecionada.id,
-            valor_pago: data.valorPagamento,
-            data_pagamento: data.dataPagamento,
-            forma_pagamento: data.formaPagamento,
-            observacao: data.observacao,
-            tipo_movimento: "parcial",
-          },
-        ]);
-
-      if (pagamentoError) {
-        console.error("Erro ao inserir pagamento:", pagamentoError);
-        throw pagamentoError;
-      }
-
-      // Atualizar a parcela
-      const { error: updateError } = await supabase
-        .from("pre_pedido_parcelas")
-        .update({
-          valor_pago: novoValorPago,
-          saldo_restante: Math.max(novoSaldoRestante, 0),
-          status: novoStatus,
-          data_pagamento: data.dataPagamento,
-        })
-        .eq("id", parcelaSelecionada.id);
-
-      if (updateError) {
-        console.error("Erro ao atualizar parcela:", updateError);
-        throw updateError;
-      }
-
-      const { error: financeiroError } = await supabase
-        .from("financeiro")
-        .insert([
-          {
-            tipo: "recebimento", // Tipo da transação
-            tipo_movimento: "entrada", // ✅ CAMPO OBRIGATÓRIO: entrada ou saida
-            descricao: `Pagamento parcial - Parcela ${parcelaSelecionada.numero_parcela} do pedido ${parcelaSelecionada.pre_pedido_id}`,
-            valor: data.valorPagamento,
-            categoria: "recebimentos",
-            data_movimento: data.dataPagamento,
-            status: "confirmado",
-          },
-        ]);
-
-      if (financeiroError) {
-        console.error("Erro ao registrar no financeiro:", financeiroError);
-        throw financeiroError;
-      }
-
-      // Mostrar mensagem de sucesso
-      await Swal.fire({
-        icon: "success",
-        title: "Sucesso!",
-        text: `Pagamento parcial de ${formatarMoeda(data.valorPagamento)} registrado com sucesso.`,
-        timer: 2000,
-        showConfirmButton: false,
-      });
-
-      // Recarregar os dados
-      await loadParcelas();
-      setModalAberto(false);
-    } catch (error) {
-      console.error("Erro detalhado ao registrar pagamento:", error);
-      Swal.fire({
-        icon: "error",
-        title: "Erro",
-        text: `Não foi possível registrar o pagamento: ${error instanceof Error ? error.message : "Erro desconhecido"}`,
-      });
-      throw error;
+    if (fetchError) {
+      console.error("Erro ao buscar parcela:", fetchError);
+      throw fetchError;
     }
-  };
+
+    const saldoAtual =
+      parcelaAtual.saldo_restante ?? parcelaAtual.valor_parcela;
+    const novoValorPago =
+      (parcelaAtual.valor_pago || 0) + data.valorPagamento;
+    const novoSaldoRestante = saldoAtual - data.valorPagamento;
+    const novoStatus = novoSaldoRestante <= 0 ? "pago" : "parcial";
+
+    const { error: pagamentoError } = await supabase
+      .from("parcela_pagamentos")
+      .insert([
+        {
+          parcela_id: parcelaSelecionada.id,
+          valor_pago: data.valorPagamento,
+          data_pagamento: data.dataPagamento,
+          forma_pagamento: data.formaPagamento,
+          observacao: data.observacao,
+          tipo_movimento: "parcial",
+        },
+      ]);
+
+    if (pagamentoError) {
+      console.error("Erro ao inserir pagamento:", pagamentoError);
+      throw pagamentoError;
+    }
+
+    const { error: updateError } = await supabase
+      .from("pre_pedido_parcelas")
+      .update({
+        valor_pago: novoValorPago,
+        saldo_restante: Math.max(novoSaldoRestante, 0),
+        status: novoStatus,
+        data_pagamento: data.dataPagamento,
+      })
+      .eq("id", parcelaSelecionada.id);
+
+    if (updateError) {
+      console.error("Erro ao atualizar parcela:", updateError);
+      throw updateError;
+    }
+
+    const { error: financeiroError } = await supabase
+      .from("financeiro")
+      .insert([
+        {
+          tipo: "recebimento",
+          tipo_movimento: "entrada",
+          descricao: `Pagamento parcial - Parcela ${parcelaSelecionada.numero_parcela} do pedido ${parcelaSelecionada.pre_pedido_id}`,
+          valor: data.valorPagamento,
+          categoria: "recebimentos",
+          data_movimento: data.dataPagamento,
+          status: "confirmado",
+        },
+      ]);
+
+    if (financeiroError) {
+      console.error("Erro ao registrar no financeiro:", financeiroError);
+      throw financeiroError;
+    }
+
+    await Swal.fire({
+      icon: "success",
+      title: "Sucesso!",
+      text: `Pagamento parcial de ${formatarMoeda(data.valorPagamento)} registrado com sucesso.`,
+      timer: 2000,
+      showConfirmButton: false,
+    });
+
+    // ✅ RECARREGAR AS PARCELAS
+    await loadParcelas();
+
+    // ✅ FECHAR O MODAL DE PAGAMENTO
+    setModalPagamentoAberto(false);
+    setParcelaSelecionada(null);
+    // ✅ FORÇAR A ATUALIZAÇÃO DO MODAL
+    setUpdateKey(prev => prev + 1);
+
+    // ✅ REABRIR O MODAL DE VISUALIZAÇÃO
+    setModalAberto(true);
+
+  } catch (error) {
+    console.error("Erro detalhado ao registrar pagamento:", error);
+    Swal.fire({
+      icon: "error",
+      title: "Erro",
+      text: `Não foi possível registrar o pagamento: ${error instanceof Error ? error.message : "Erro desconhecido"}`,
+    });
+    throw error;
+  }
+};
+
 
   // Método para negociar parcela
   const handleNegociarParcela = async (parcela: Parcela) => {
@@ -410,10 +486,10 @@ export default function ParcelasManagement() {
       clienteResumo.parcelas.push(parcela);
       clienteResumo.quantidadeParcelas++;
 
-      // Calcular totais
+      // ✅ CORREÇÃO: Usar a função isDataAtrasada para verificar atraso
       if (parcela.status === "pendente" || parcela.status === "parcial") {
         const saldo = parcela.saldo_restante ?? parcela.valor_parcela;
-        if (new Date(parcela.data_vencimento) < new Date()) {
+        if (isDataAtrasada(parcela.data_vencimento)) {
           clienteResumo.totalAtrasado += saldo;
         } else {
           clienteResumo.totalPendente += saldo;
@@ -450,12 +526,15 @@ export default function ParcelasManagement() {
         )
         .order("data_vencimento", { ascending: true });
 
+      // ✅ CORREÇÃO: Usar a data formatada corretamente
+      const dataAtualFormatada = obterDataAtualFormatada();
+
       // Aplicar filtros corretamente
       if (filtroStatus !== "todos") {
         if (filtroStatus === "atrasadas") {
           query = query
             .eq("status", "pendente")
-            .lt("data_vencimento", new Date().toISOString().split("T")[0]);
+            .lt("data_vencimento", dataAtualFormatada);
         } else if (filtroStatus === "parcial") {
           query = query.eq("status", "parcial");
         } else {
@@ -498,117 +577,129 @@ export default function ParcelasManagement() {
   }, [filtroStatus, dataInicio, dataFim, filtroCliente]);
 
   const abrirModalParcelas = (cliente: Cliente, parcelasCliente: Parcela[]) => {
-    const primeiraParcela = parcelasCliente[0];
-    setClienteSelecionado(cliente);
-    setParcelasClienteSelecionado(parcelasCliente);
+  // Salvar o cliente selecionado ANTES de abrir o modal
+  setClienteSelecionado(cliente);
+  setParcelasClienteSelecionado(parcelasCliente);
+  
+  const primeiraParcela = parcelasCliente[0];
+  if (primeiraParcela) {
     setPrePedidoId(primeiraParcela.pre_pedido_id);
     setTotalPedido(primeiraParcela.pre_pedido?.total || 0);
-    setModalAberto(true);
-  };
+  }
+  setModalAberto(true);
+};
 
-  const handleMarcarComoPago = async (parcela: Parcela) => {
-    setModalAberto(false);
-    setParcelaSelecionada(parcela);
-    setModalPagamentoTotalAberto(true);
-  };
+// ✅ CORRIGIR: handleMarcarComoPago - manter o cliente selecionado
+const handleMarcarComoPago = async (parcela: Parcela) => {
+  // Fecha o modal de visualização, mas mantém o cliente selecionado
+  setModalAberto(false);
+  setParcelaSelecionada(parcela);
+  setModalPagamentoTotalAberto(true);
+};
 
-  // Adicione a função de confirmação do pagamento total
   const handleConfirmarPagamentoTotal = async (data: {
-    valorPago: number;
-    dataPagamento: string;
-    formaPagamento: string;
-  }) => {
-    if (!parcelaSelecionada) return;
+  valorPago: number;
+  dataPagamento: string;
+  formaPagamento: string;
+}) => {
+  if (!parcelaSelecionada) return;
 
-    try {
-      // Buscar dados atuais da parcela
-      const { data: parcelaAtual, error: fetchError } = await supabase
-        .from("pre_pedido_parcelas")
-        .select("valor_parcela, saldo_restante, valor_pago, status")
-        .eq("id", parcelaSelecionada.id)
-        .single();
+  try {
+    const { data: parcelaAtual, error: fetchError } = await supabase
+      .from("pre_pedido_parcelas")
+      .select("valor_parcela, saldo_restante, valor_pago, status")
+      .eq("id", parcelaSelecionada.id)
+      .single();
 
-      if (fetchError) throw fetchError;
+    if (fetchError) throw fetchError;
 
-      const valorPagoTotal = Math.min(
-        data.valorPago,
-        parcelaAtual.valor_parcela,
-      );
-      const isPagamentoTotal = valorPagoTotal >= parcelaAtual.valor_parcela;
-      const novoValorPago = (parcelaAtual.valor_pago || 0) + valorPagoTotal;
-      const novoSaldoRestante = parcelaAtual.valor_parcela - novoValorPago;
-      const novoStatus = isPagamentoTotal
-        ? "pago"
-        : novoSaldoRestante > 0
-          ? "parcial"
-          : "pago";
+    const valorPagoTotal = Math.min(
+      data.valorPago,
+      parcelaAtual.valor_parcela,
+    );
+    const isPagamentoTotal = valorPagoTotal >= parcelaAtual.valor_parcela;
+    const novoValorPago = (parcelaAtual.valor_pago || 0) + valorPagoTotal;
+    const novoSaldoRestante = parcelaAtual.valor_parcela - novoValorPago;
+    const novoStatus = isPagamentoTotal
+      ? "pago"
+      : novoSaldoRestante > 0
+        ? "parcial"
+        : "pago";
 
-      // Registrar pagamento no histórico
-      const { error: pagamentoError } = await supabase
-        .from("parcela_pagamentos")
-        .insert([
-          {
-            parcela_id: parcelaSelecionada.id,
-            valor_pago: valorPagoTotal,
-            data_pagamento: data.dataPagamento,
-            forma_pagamento: data.formaPagamento,
-            tipo_movimento: isPagamentoTotal ? "total" : "parcial",
-          },
-        ]);
-
-      if (pagamentoError) throw pagamentoError;
-
-      // Atualizar a parcela
-      const { error: updateError } = await supabase
-        .from("pre_pedido_parcelas")
-        .update({
-          status: novoStatus,
-          valor_pago: novoValorPago,
+    const { error: pagamentoError } = await supabase
+      .from("parcela_pagamentos")
+      .insert([
+        {
+          parcela_id: parcelaSelecionada.id,
+          valor_pago: valorPagoTotal,
           data_pagamento: data.dataPagamento,
-          saldo_restante: Math.max(novoSaldoRestante, 0),
-        })
-        .eq("id", parcelaSelecionada.id);
+          forma_pagamento: data.formaPagamento,
+          tipo_movimento: isPagamentoTotal ? "total" : "parcial",
+        },
+      ]);
 
-      if (updateError) throw updateError;
+    if (pagamentoError) throw pagamentoError;
 
-      // Registrar no financeiro
-      const { error: financeiroError } = await supabase
-        .from("financeiro")
-        .insert([
-          {
-            tipo: "recebimento",
-            tipo_movimento: "entrada", // <-- ADICIONAR
-            descricao: `Pagamento - Parcela ${parcelaSelecionada.numero_parcela} do pedido ${parcelaSelecionada.pre_pedido_id}`,
-            valor: valorPagoTotal,
-            categoria: "recebimentos",
-            data_movimento: data.dataPagamento,
-            status: "confirmado",
-          },
-        ]);
+    const { error: updateError } = await supabase
+      .from("pre_pedido_parcelas")
+      .update({
+        status: novoStatus,
+        valor_pago: novoValorPago,
+        data_pagamento: data.dataPagamento,
+        saldo_restante: Math.max(novoSaldoRestante, 0),
+      })
+      .eq("id", parcelaSelecionada.id);
 
-      if (financeiroError) throw financeiroError;
+    if (updateError) throw updateError;
 
-      await Swal.fire({
-        icon: "success",
-        title: "Sucesso!",
-        text: `Pagamento de ${formatarMoeda(valorPagoTotal)} registrado com sucesso.`,
-        timer: 2000,
-        showConfirmButton: false,
-      });
+    const { error: financeiroError } = await supabase
+      .from("financeiro")
+      .insert([
+        {
+          tipo: "recebimento",
+          tipo_movimento: "entrada",
+          descricao: `Pagamento - Parcela ${parcelaSelecionada.numero_parcela} do pedido ${parcelaSelecionada.pre_pedido_id}`,
+          valor: valorPagoTotal,
+          categoria: "recebimentos",
+          data_movimento: data.dataPagamento,
+          status: "confirmado",
+        },
+      ]);
 
-      await loadParcelas();
-    } catch (error) {
-      console.error("Erro ao registrar pagamento:", error);
-      Swal.fire({
-        icon: "error",
-        title: "Erro",
-        text: "Não foi possível registrar o pagamento.",
-      });
-      throw error;
-    }
-  };
+    if (financeiroError) throw financeiroError;
 
-  // Função para atualizar as parcelas após alterações
+    await Swal.fire({
+      icon: "success",
+      title: "Sucesso!",
+      text: `Pagamento de ${formatarMoeda(valorPagoTotal)} registrado com sucesso.`,
+      timer: 2000,
+      showConfirmButton: false,
+    });
+
+    // ✅ RECARREGAR AS PARCELAS
+    await loadParcelas();
+
+    // ✅ FECHAR O MODAL DE PAGAMENTO
+    setModalPagamentoTotalAberto(false);
+    setParcelaSelecionada(null);
+    // ✅ FORÇAR A ATUALIZAÇÃO DO MODAL
+    setUpdateKey(prev => prev + 1);
+
+    // ✅ GARANTIR QUE O MODAL DE VISUALIZAÇÃO VAI REABRIR COM OS DADOS ATUALIZADOS
+    // O useEffect vai sincronizar as parcelas automaticamente
+    setModalAberto(true);
+
+  } catch (error) {
+    console.error("Erro ao registrar pagamento:", error);
+    Swal.fire({
+      icon: "error",
+      title: "Erro",
+      text: "Não foi possível registrar o pagamento.",
+    });
+    throw error;
+  }
+};
+
   const handleParcelasAtualizadas = () => {
     loadParcelas();
   };
@@ -620,12 +711,12 @@ export default function ParcelasManagement() {
     }).format(valor);
   };
 
-  // Totais gerais (para os cards de resumo)
+  // ✅ CORREÇÃO: Totais gerais usando as funções corrigidas
   const totalPendente = parcelas
     .filter(
       (p) =>
         (p.status === "pendente" || p.status === "parcial") &&
-        new Date(p.data_vencimento) >= new Date(),
+        isDataPendente(p.data_vencimento),
     )
     .reduce((sum, p) => sum + (p.saldo_restante ?? p.valor_parcela), 0);
 
@@ -633,7 +724,7 @@ export default function ParcelasManagement() {
     .filter(
       (p) =>
         (p.status === "pendente" || p.status === "parcial") &&
-        new Date(p.data_vencimento) < new Date(),
+        isDataAtrasada(p.data_vencimento),
     )
     .reduce((sum, p) => sum + (p.saldo_restante ?? p.valor_parcela), 0);
 
@@ -905,7 +996,6 @@ export default function ParcelasManagement() {
                 <ChevronLeft size={16} />
               </button>
 
-              {/* Números das páginas */}
               {Array.from({ length: Math.min(5, totalPaginas) }, (_, i) => {
                 let numeroPagina;
                 if (totalPaginas <= 5) {
@@ -999,7 +1089,7 @@ export default function ParcelasManagement() {
       )}
       {/* Modal de Visualização de Parcelas */}
       <VisualizarParcelasModal
-        key={prePedidoId}
+  key={`${prePedidoId}-${updateKey}`} 
         isOpen={modalAberto}
         onClose={() => setModalAberto(false)}
         parcelas={parcelasClienteSelecionado}

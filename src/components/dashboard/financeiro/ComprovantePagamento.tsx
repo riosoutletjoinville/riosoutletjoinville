@@ -11,7 +11,6 @@ interface Cliente {
   sobrenome?: string;
 }
 
-// Sincronizar com a interface do ParcelasManagement
 interface Parcela {
   id: string;
   pre_pedido_id: string;
@@ -54,8 +53,22 @@ export default function ComprovantePagamento({
     return `${cliente.nome || ""} ${cliente.sobrenome || ""}`.trim();
   };
 
-  const formatarData = (data: string): string => {
-    return new Date(data).toLocaleDateString("pt-BR");
+  // ✅ FUNÇÃO CORRIGIDA - Ajusta a data para o timezone local
+  const formatarDataLocal = (data: string | Date): string => {
+    const dataObj = typeof data === 'string' ? new Date(data) : data;
+    
+    // Se a data for inválida, retorna data atual
+    if (isNaN(dataObj.getTime())) {
+      return new Date().toLocaleDateString("pt-BR");
+    }
+    
+    // Usa toLocaleDateString com timezone específico para garantir o dia correto
+    return dataObj.toLocaleDateString("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric"
+    });
   };
 
   const formatarMoeda = (valor: number): string => {
@@ -97,9 +110,27 @@ export default function ComprovantePagamento({
     }
   };
 
+  // ✅ CORREÇÃO: Funções que retornam as datas formatadas corretamente
+  const getDataPagamento = (): string => {
+    if (parcela.data_pagamento) {
+      return formatarDataLocal(parcela.data_pagamento);
+    }
+    return formatarDataLocal(new Date());
+  };
+
+  const getDataVencimento = (): string => {
+    return formatarDataLocal(parcela.data_vencimento);
+  };
+
   const handleImprimir = () => {
     const comprovanteContent = comprovanteRef.current;
     if (!comprovanteContent) return;
+
+    // ✅ CORREÇÃO: Usar as datas formatadas corretamente
+    const dataPagamentoFormatada = getDataPagamento();
+    const dataVencimentoFormatada = getDataVencimento();
+    const dataEmissaoFormatada = formatarDataLocal(new Date());
+    const horaEmissao = new Date().toLocaleTimeString("pt-BR");
 
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
@@ -168,7 +199,73 @@ export default function ComprovantePagamento({
           </style>
         </head>
         <body>
-          ${comprovanteContent.innerHTML}
+          <div class="comprovante">
+            <div class="header">
+              <h1>COMPROVANTE DE PAGAMENTO</h1>
+            </div>
+            
+            <div class="info-section">
+              <div class="info-row">
+                <span class="info-label">Cliente:</span>
+                <span>${getClienteNome(cliente)}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Nº do Pedido:</span>
+                <span>${prePedidoId}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Parcela:</span>
+                <span>${parcela.numero_parcela}ª parcela</span>
+              </div>
+            </div>
+
+            <div class="info-section">
+              <div class="info-row">
+                <span class="info-label">Valor Original:</span>
+                <span>${formatarMoeda(parcela.valor_parcela)}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Valor Pago:</span>
+                <span><strong>${formatarMoeda(parcela.valor_pago || parcela.valor_parcela)}</strong></span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Data de Vencimento:</span>
+                <span>${dataVencimentoFormatada}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Data do Pagamento:</span>
+                <span><strong>${dataPagamentoFormatada}</strong></span>
+              </div>
+            </div>
+
+            <div class="info-section">
+              <div class="info-row">
+                <span class="info-label">Status:</span>
+                <span><strong>${getStatusText(parcela.status)}</strong></span>
+              </div>
+              ${parcela.observacao ? `
+              <div class="info-row">
+                <span class="info-label">Observações:</span>
+                <span>${parcela.observacao}</span>
+              </div>
+              ` : ''}
+              ${parcela.observacao_negociacao ? `
+              <div class="info-row">
+                <span class="info-label">Negociação:</span>
+                <span>${parcela.observacao_negociacao}</span>
+              </div>
+              ` : ''}
+            </div>
+
+            <div class="assinatura">
+              <p>___________________________________</p>
+              <p>Assinatura do Recebedor</p>
+            </div>
+
+            <div class="data-emissao">
+              Emitido em: ${dataEmissaoFormatada} às ${horaEmissao}
+            </div>
+          </div>
         </body>
       </html>
     `);
@@ -182,19 +279,16 @@ export default function ComprovantePagamento({
     const comprovanteContent = comprovanteRef.current;
     if (!comprovanteContent) return;
 
-    // Calcular valores
-    const valorPago = parcela.valor_pago || parcela.valor_parcela;
-    const saldoRestante = parcela.saldo_restante !== undefined && parcela.saldo_restante > 0 
-      ? parcela.saldo_restante 
-      : (parcela.status === "parcial" ? parcela.valor_parcela - valorPago : 0);
-    const isParcial = parcela.status === "parcial" || (saldoRestante > 0 && valorPago < parcela.valor_parcela);
+    // ✅ CORREÇÃO: Usar as datas formatadas corretamente
+    const dataPagamentoFormatada = getDataPagamento();
+    const dataVencimentoFormatada = getDataVencimento();
+    const dataEmissaoFormatada = formatarDataLocal(new Date());
+    const horaEmissao = new Date().toLocaleTimeString("pt-BR");
 
-    // Criar conteúdo para PDF/impressão
     const printContent = `
       <div class="comprovante">
         <div class="header">
           <h1>COMPROVANTE DE PAGAMENTO</h1>
-          ${isParcial ? '<p style="color: #2563eb; font-weight: bold; margin-top: 5px;">* Pagamento Parcial *</p>' : ''}
         </div>
         
         <div class="info-section">
@@ -219,28 +313,22 @@ export default function ComprovantePagamento({
           </div>
           <div class="info-row">
             <span class="info-label">Valor Pago:</span>
-            <span><strong>${formatarMoeda(valorPago)}</strong></span>
+            <span><strong>${formatarMoeda(parcela.valor_pago || parcela.valor_parcela)}</strong></span>
           </div>
-          ${isParcial && saldoRestante > 0 ? `
-          <div class="info-row">
-            <span class="info-label">Saldo Restante:</span>
-            <span><strong style="color: #dc2626;">${formatarMoeda(saldoRestante)}</strong></span>
-          </div>
-          ` : ''}
           <div class="info-row">
             <span class="info-label">Data de Vencimento:</span>
-            <span>${formatarData(parcela.data_vencimento)}</span>
+            <span>${dataVencimentoFormatada}</span>
           </div>
           <div class="info-row">
             <span class="info-label">Data do Pagamento:</span>
-            <span><strong>${formatarData(parcela.data_pagamento || new Date().toISOString())}</strong></span>
+            <span><strong>${dataPagamentoFormatada}</strong></span>
           </div>
         </div>
 
         <div class="info-section">
           <div class="info-row">
             <span class="info-label">Status:</span>
-            <span><strong style="color: ${isParcial ? '#2563eb' : '#16a34a'};">${getStatusText(parcela.status)}</strong></span>
+            <span><strong>${getStatusText(parcela.status)}</strong></span>
           </div>
           ${parcela.observacao ? `
           <div class="info-row">
@@ -256,26 +344,17 @@ export default function ComprovantePagamento({
           ` : ''}
         </div>
 
-        ${isParcial ? `
-        <div class="saldo-restante">
-          <p style="text-align: center; color: #2563eb;">
-            ⚠️ Pagamento Parcial - Saldo remanescente: ${formatarMoeda(saldoRestante)}
-          </p>
-        </div>
-        ` : ''}
-
         <div class="assinatura">
           <p>___________________________________</p>
           <p>Assinatura do Recebedor</p>
         </div>
 
         <div class="data-emissao">
-          Emitido em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}
+          Emitido em: ${dataEmissaoFormatada} às ${horaEmissao}
         </div>
       </div>
     `;
 
-    // Abrir nova janela para impressão/download
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
@@ -359,6 +438,12 @@ export default function ComprovantePagamento({
     : (parcela.status === "parcial" ? parcela.valor_parcela - valorPago : 0);
   const isParcial = parcela.status === "parcial" || (saldoRestante > 0 && valorPago < parcela.valor_parcela);
 
+  // ✅ DATAS CORRIGIDAS PARA EXIBIÇÃO
+  const dataPagamentoFormatada = getDataPagamento();
+  const dataVencimentoFormatada = getDataVencimento();
+  const dataEmissaoFormatada = formatarDataLocal(new Date());
+  const horaEmissao = new Date().toLocaleTimeString("pt-BR");
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
@@ -398,7 +483,7 @@ export default function ComprovantePagamento({
             </div>
           </div>
 
-          {/* Valores e Datas */}
+          {/* Valores e Datas - ✅ CORRIGIDO */}
           <div className="mb-4">
             <div className="flex justify-between mb-2">
               <span className="font-semibold">Valor Original:</span>
@@ -420,12 +505,12 @@ export default function ComprovantePagamento({
             )}
             <div className="flex justify-between mb-2">
               <span className="font-semibold">Data de Vencimento:</span>
-              <span>{formatarData(parcela.data_vencimento)}</span>
+              <span>{dataVencimentoFormatada}</span>
             </div>
             <div className="flex justify-between mb-2">
               <span className="font-semibold">Data do Pagamento:</span>
               <span className="font-bold">
-                {formatarData(parcela.data_pagamento || new Date().toISOString())}
+                {dataPagamentoFormatada}
               </span>
             </div>
           </div>
@@ -467,9 +552,9 @@ export default function ComprovantePagamento({
             <p className="text-sm">Assinatura do Recebedor</p>
           </div>
 
-          {/* Data de Emissão */}
+          {/* Data de Emissão - ✅ CORRIGIDO */}
           <div className="text-right mt-4 text-sm text-gray-600">
-            Emitido em: {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR')}
+            Emitido em: {dataEmissaoFormatada} às {horaEmissao}
           </div>
         </div>
 

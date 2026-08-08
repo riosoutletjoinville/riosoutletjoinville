@@ -16,6 +16,8 @@ import { useState, useEffect } from "react";
 import ComprovantePagamento from "./ComprovantePagamento";
 import { supabase } from "@/lib/supabase";
 import Swal from "sweetalert2";
+// ✅ IMPORTAR FUNÇÕES DO UTILITÁRIO
+import { formatarDataLocal, formatarDataParaInput, obterDataAtualFormatada } from "@/utils/dateUtils";
 
 // Sincronizar com as interfaces do ParcelasManagement
 interface Cliente {
@@ -69,29 +71,20 @@ export default function VisualizarParcelasModal({
   onVerHistorico,
   onParcelasAtualizadas,
 }: VisualizarParcelasModalProps) {
-  // Estados para paginação
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [itensPorPagina, setItensPorPagina] = useState(10);
-  // Estado para filtro de status
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
-  // Estado para comprovante
   const [comprovanteAberto, setComprovanteAberto] = useState(false);
-  const [parcelaSelecionada, setParcelaSelecionada] = useState<Parcela | null>(
-    null
-  );
-
-  // Estado para edição de data
+  const [parcelaSelecionada, setParcelaSelecionada] = useState<Parcela | null>(null);
   const [editandoData, setEditandoData] = useState<string | null>(null);
   const [novaData, setNovaData] = useState<string>("");
   const [salvandoData, setSalvandoData] = useState(false);
-  // Estado local para as parcelas (para atualização visual imediata)
   const [parcelas, setParcelas] = useState<Parcela[]>(parcelasIniciais);
 
   useEffect(() => {
     setParcelas(parcelasIniciais);
   }, [parcelasIniciais]);
 
-  // Resetar estados quando o modal abrir
   useEffect(() => {
     if (isOpen) {
       setPaginaAtual(1);
@@ -102,21 +95,21 @@ export default function VisualizarParcelasModal({
 
   if (!isOpen) return null;
 
-  // Filtrar parcelas pelo status selecionado
+  // ✅ CORREÇÃO: Filtrar usando as funções do utilitário
   const parcelasFiltradas = parcelas.filter((parcela) => {
     if (filtroStatus === "todos") return true;
 
     if (filtroStatus === "atrasadas") {
+      const dataAtual = obterDataAtualFormatada();
       return (
         (parcela.status === "pendente" || parcela.status === "parcial") &&
-        new Date(parcela.data_vencimento) < new Date()
+        formatarDataParaInput(parcela.data_vencimento) < dataAtual
       );
     }
 
     return parcela.status === filtroStatus;
   });
 
-  // Cálculos para paginação
   const indiceUltimoItem = paginaAtual * itensPorPagina;
   const indicePrimeiroItem = indiceUltimoItem - itensPorPagina;
   const parcelasPaginadas = parcelasFiltradas.slice(
@@ -180,16 +173,10 @@ export default function VisualizarParcelasModal({
     }
   };
 
-  const TimezoneData = (dataString: string): string => {
-    const data = new Date(dataString);
-    const timezoneOffset = data.getTimezoneOffset() * 60000;
-    const dataAjustada = new Date(data.getTime() + timezoneOffset);
-    return dataAjustada.toISOString().split("T")[0];
-  };
-
+  // ✅ CORREÇÃO: Usar formatarDataParaInput em vez de TimezoneData
   const iniciarEdicaoData = (parcela: Parcela) => {
     setEditandoData(parcela.id);
-    const dataCorrigida = TimezoneData(parcela.data_vencimento);
+    const dataCorrigida = formatarDataParaInput(parcela.data_vencimento);
     setNovaData(dataCorrigida);
   };
 
@@ -223,7 +210,8 @@ export default function VisualizarParcelasModal({
       );
     }
     
-    if (parcela.status === "pendente" && new Date(parcela.data_vencimento) < new Date()) {
+    // ✅ CORREÇÃO: Usar formatarDataParaInput e obterDataAtualFormatada
+    if (parcela.status === "pendente" && formatarDataParaInput(parcela.data_vencimento) < obterDataAtualFormatada()) {
       return (
         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
           <Clock size={12} className="mr-1" />
@@ -256,12 +244,12 @@ export default function VisualizarParcelasModal({
     return `${cliente.nome || ""} ${cliente.sobrenome || ""}`.trim();
   };
 
-  // Calcular totais
+  // ✅ CORREÇÃO: Calcular totais usando as funções do utilitário
   const totalPendente = parcelasFiltradas
     .filter(
       (p) =>
         (p.status === "pendente" || p.status === "parcial") &&
-        new Date(p.data_vencimento) >= new Date()
+        formatarDataParaInput(p.data_vencimento) >= obterDataAtualFormatada()
     )
     .reduce((sum, p) => sum + (p.saldo_restante ?? p.valor_parcela), 0);
 
@@ -269,7 +257,7 @@ export default function VisualizarParcelasModal({
     .filter(
       (p) =>
         (p.status === "pendente" || p.status === "parcial") &&
-        new Date(p.data_vencimento) < new Date()
+        formatarDataParaInput(p.data_vencimento) < obterDataAtualFormatada()
     )
     .reduce((sum, p) => sum + (p.saldo_restante ?? p.valor_parcela), 0);
 
@@ -428,8 +416,9 @@ export default function VisualizarParcelasModal({
                 {parcelasPaginadas.map((parcela) => (
                   <tr
                     key={parcela.id}
+                    // ✅ CORREÇÃO: Usar formatarDataParaInput e obterDataAtualFormatada
                     className={
-                      new Date(parcela.data_vencimento) < new Date() &&
+                      formatarDataParaInput(parcela.data_vencimento) < obterDataAtualFormatada() &&
                       (parcela.status === "pendente" || parcela.status === "parcial")
                         ? "bg-red-50"
                         : ""
@@ -475,12 +464,9 @@ export default function VisualizarParcelasModal({
                       ) : (
                         <div className="flex items-center space-x-2">
                           <Calendar size={14} className="text-gray-400" />
+                          {/* ✅ CORREÇÃO: Usar formatarDataLocal */}
                           <span>
-                            {parcela.data_vencimento
-                              .split("T")[0]
-                              .split("-")
-                              .reverse()
-                              .join("/")}
+                            {formatarDataLocal(parcela.data_vencimento)}
                           </span>
                           <button
                             onClick={() => iniciarEdicaoData(parcela)}
@@ -496,8 +482,9 @@ export default function VisualizarParcelasModal({
                       {getStatusBadge(parcela)}
                     </td>
                     <td className="px-4 py-3">
+                      {/* ✅ CORREÇÃO: Usar formatarDataLocal */}
                       {parcela.data_pagamento
-                        ? new Date(parcela.data_pagamento).toLocaleDateString("pt-BR")
+                        ? formatarDataLocal(parcela.data_pagamento)
                         : "-"}
                     </td>
                     <td className="px-4 py-3">
