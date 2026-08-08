@@ -1,11 +1,11 @@
-// src/app/layout.tsx - VERSÃO CORRIGIDA
+// src/app/layout.tsx
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ClienteAuthProvider } from "@/contexts/ClienteAuthContext";
 import { LoadingBar } from "@/components/ui/LoadingBar";
 import { Toaster } from "react-hot-toast";
 import Script from "next/script";
-import Image from "next/image"; 
+import PixelProvider from "@/components/pixel/PixelProvider";
 import "./globals.css";
 
 export default function RootLayout({
@@ -31,15 +31,17 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.ico" />
       </head>
       <body>
-        <ThemeProvider>
-          <AuthProvider>
-            <ClienteAuthProvider>
-              <LoadingBar />
-              {children}
-              <Toaster position="top-right" />
-            </ClienteAuthProvider>
-          </AuthProvider>
-        </ThemeProvider>
+        <PixelProvider>
+          <ThemeProvider>
+            <AuthProvider>
+              <ClienteAuthProvider>
+                <LoadingBar />
+                {children}
+                <Toaster position="top-right" />
+              </ClienteAuthProvider>
+            </AuthProvider>
+          </ThemeProvider>
+        </PixelProvider>
 
         {/* MERCADOPAGO - MUDAR PARA lazyOnload */}
         <Script
@@ -64,36 +66,6 @@ export default function RootLayout({
             `,
           }}
         />
-
-        {/* Facebook Pixel - MUDAR PARA lazyOnload */}
-        <Script
-          id="fb-pixel"
-          strategy="lazyOnload"
-          dangerouslySetInnerHTML={{
-            __html: `
-              !function(f,b,e,v,n,t,s)
-              {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-              n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-              if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-              n.queue=[];t=b.createElement(e);t.async=!0;
-              t.src=v;s=b.getElementsByTagName(e)[0];
-              s.parentNode.insertBefore(t,s)}(window, document,'script',
-              'https://connect.facebook.net/en_US/fbevents.js');
-              fbq('init', '1190516236345066');
-              fbq('track', 'PageView');
-            `,
-          }}
-        />
-        <noscript>
-          <Image
-            height="1"
-            width="1"
-            style={{ display: "none" }}
-            src="https://www.facebook.com/tr?id=1190516236345066&ev=PageView&noscript=1"
-            alt=""
-            unoptimized
-          />
-        </noscript>
       </body>
     </html>
   );

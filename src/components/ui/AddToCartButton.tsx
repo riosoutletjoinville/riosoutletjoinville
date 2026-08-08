@@ -3,6 +3,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useCarrinho } from "@/hooks/useCarrinho";
+import { usePixelEvents } from "@/hooks/usePixelEvents";
 import { ShoppingCart, Check, X } from "lucide-react";
 import { Button } from "./button";
 import Swal from "sweetalert2";
@@ -15,6 +16,8 @@ interface AddToCartButtonProps {
     preco: number;
     estoque: number;
     imagens?: Array<{ url: string }>;
+    categoria?: { nome: string };
+    marca?: { nome: string };
     variacoes?: Array<{
       id: string;
       estoque: number;
@@ -37,6 +40,7 @@ export function AddToCartButton({ produto }: AddToCartButtonProps) {
   const [variacaoSelecionada, setVariacaoSelecionada] = useState<string>("");
   const [adicionando, setAdicionando] = useState(false);
   const { adicionarAoCarrinho } = useCarrinho();
+  const { trackAddToCart } = usePixelEvents();
 
   const temVariacoes = produto.variacoes && produto.variacoes.length > 0;
 
@@ -185,6 +189,19 @@ export function AddToCartButton({ produto }: AddToCartButtonProps) {
 
     adicionarAoCarrinho(itemCarrinho);
     setAdicionando(false);
+
+    // ======== PIXEL: TRACK ADD TO CART ========
+    trackAddToCart({
+      id: produto.id,
+      titulo: produto.titulo,
+      name: produto.titulo,
+      preco: precoAtual,
+      price: precoAtual,
+      categoria: produto.categoria,
+      marca: produto.marca,
+      variacao_selecionada: variacaoSelecionada,
+    }, quantidade);
+    // ==========================================
 
     // Obter informações da variação para exibir no modal
     const variacaoInfo = variacaoSelecionada

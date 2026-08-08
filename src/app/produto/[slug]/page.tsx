@@ -10,6 +10,7 @@ import { ProductStructuredData } from "@/components/seo/StructuredData";
 import SimpleHeader from "@/components/ui/SimpleHeader";
 import ExpandableText from "@/components/ui/ExpandableText";
 import React from "react";
+import { ProductViewTracker } from "./ProductViewTracker";
 
 // ========== INTERFACES PARA TIPAGEM ==========
 interface CategoriaPai {
@@ -207,6 +208,7 @@ export default async function ProdutoPage({ params }: Props) {
     <>
       {/* Dados estruturados para SEO */}
       <ProductStructuredData product={structuredDataProduct} />
+      <ProductViewTracker product={produtoTyped} />
       <SimpleHeader />
       <div className="min-h-screen bg-gray-50">
         {/* Breadcrumb */}
