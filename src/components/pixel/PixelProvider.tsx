@@ -49,7 +49,7 @@ function getPageCategory(pathname: string): string {
 }
 
 export default function PixelProvider({ children }: PixelProviderProps) {
-  const pixelId = process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID;
+  const pixelId = process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID || '2705596896524633'; // Substitua pelo seu Pixel ID real
 
   // Log de inicialização
   useEffect(() => {

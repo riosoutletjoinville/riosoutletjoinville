@@ -61,7 +61,7 @@ class PixelManager {
   private maxRetries = 5;
 
   constructor() {
-    this.pixelId = process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID || null;
+    this.pixelId = process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID || '2705596896524633';
     this.debugMode = process.env.NODE_ENV === 'development';
   }
 
