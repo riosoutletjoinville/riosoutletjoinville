@@ -1,16 +1,11 @@
 // src/components/pixel/PixelProvider.tsx
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, Suspense } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { pixelManager } from '@/lib/pixel-manager';
 import Script from 'next/script';
 
-interface PixelProviderProps {
-  children: React.ReactNode;
-}
-
-// Componente que rastreia mudanças de página
 function PageViewTracker() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -18,17 +13,16 @@ function PageViewTracker() {
 
   useEffect(() => {
     const currentPath = pathname + searchParams.toString();
-    
-    if (previousPathRef.current !== currentPath) {
-      // Rastrear PageView com informações da página
+
+    if (previousPathRef.current!== currentPath) {
       const pageTitle = document.title || 'Rios Outlet';
       const pageCategory = getPageCategory(pathname);
-      
+
       pixelManager.trackPageView({
         content_name: pageTitle,
         content_category: pageCategory,
       });
-      
+
       previousPathRef.current = currentPath;
     }
   }, [pathname, searchParams]);
@@ -43,32 +37,29 @@ function getPageCategory(pathname: string): string {
   if (pathname.startsWith('/carrinho')) return 'carrinho';
   if (pathname.startsWith('/checkout')) return 'checkout';
   if (pathname.startsWith('/busca')) return 'busca';
-  if (pathname.startsWith('/dashboard')) return 'admin';
-  if (pathname.startsWith('/minha-conta')) return 'conta';
   return 'home';
 }
 
-export default function PixelProvider({ children }: PixelProviderProps) {
-  const pixelId = process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID || '2705596896524633'; // Substitua pelo seu Pixel ID real
+export default function PixelProvider({ children }: { children: React.ReactNode }) {
+  const pixelId = process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID || '2705596896524633';
 
-  // Log de inicialização
   useEffect(() => {
-    if (pixelId) {
-      console.log('[Pixel] Pixel ID configurado:', pixelId);
-    } else {
-      console.warn('[Pixel] Nenhum Pixel ID configurado');
-    }
+    console.log('[Pixel] ID configurado:', pixelId);
   }, [pixelId]);
+
+  if (!pixelId) {
+    console.warn('[Pixel] ID não configurado');
+    return <>{children}</>;
+  }
 
   return (
     <>
-      {/* Pixel Base - usar afterInteractive para garantir que carregue rápido */}
       <Script
-        id="facebook-pixel-init"
+        id="facebook-pixel-base"
         strategy="afterInteractive"
         dangerouslySetInnerHTML={{
           __html: `
-            !function(f,b,e,v,n,t,s)
+           !function(f,b,e,v,n,t,s)
             {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
             n.callMethod.apply(n,arguments):n.queue.push(arguments)};
             if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
@@ -81,11 +72,23 @@ export default function PixelProvider({ children }: PixelProviderProps) {
           `,
         }}
       />
-      
-      {/* Tracker de página para SPA */}
-      <PageViewTracker />
-      
+
+      <Suspense fallback={null}>
+        <PageViewTracker />
+      </Suspense>
+
       {children}
+
+      {/* Necessário para o Helper validar */}
+      <noscript>
+        <img
+          height="1"
+          width="1"
+          style={{ display: 'none' }}
+          src={`https://www.facebook.com/tr?id=${pixelId}&ev=PageView&noscript=1`}
+          alt=""
+        />
+      </noscript>
     </>
   );
 }
