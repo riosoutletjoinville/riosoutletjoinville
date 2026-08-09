@@ -22,7 +22,7 @@ interface Marca {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = 'https://riosoutlet.com.br'
+  const baseUrl = 'https://riosoutlet.joinville.br'
   
   // Rotas estáticas - garantir URLs sem barras duplicadas
   const staticRoutes: MetadataRoute.Sitemap = [
