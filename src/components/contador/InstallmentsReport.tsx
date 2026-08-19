@@ -32,24 +32,29 @@ interface InstallmentsReportProps {
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (startDate: Date, endDate: Date) => void;
-  type: "excel" | "pdf";
+  onConfirm: (startDate: Date, endDate: Date, tipoMovimento?: "E" | "S" | "R" | "D") => void;
+  type: "excel" | "pdf" | "txt";
 }
+
+type TipoMovimentoERP = "E" | "S" | "R" | "D";
 
 function ExportModal({ isOpen, onClose, onConfirm, type }: ExportModalProps) {
   const [startDate, setStartDate] = useState(
     new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );
   const [endDate, setEndDate] = useState(new Date());
+  const [tipoMovimento, setTipoMovimento] = useState<TipoMovimentoERP>("S");
 
   if (!isOpen) return null;
 
+  const isTxt = type === "txt";
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center p-6 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">
-            Exportar para {type === "excel" ? "Excel" : "PDF"}
+            Exportar para {type === "excel" ? "Excel" : type === "pdf" ? "PDF" : "TXT (ERP)"}
           </h3>
           <button
             onClick={onClose}
@@ -88,6 +93,40 @@ function ExportModal({ isOpen, onClose, onConfirm, type }: ExportModalProps) {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
+
+            {isTxt && (
+              <div className="pt-2 border-t">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tipo de Movimento ERP
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { v: "S", l: "Saídas (Vendas)" },
+                    { v: "E", l: "Entradas (Compras)" },
+                    { v: "R", l: "Serviços" },
+                    { v: "D", l: "Demais" },
+                  ].map((t) => (
+                    <label
+                      key={t.v}
+                      className={`flex items-center p-2 border rounded cursor-pointer text-xs ${tipoMovimento === t.v ? "border-blue-500 bg-blue-50" : "border-gray-200"}`}
+                    >
+                      <input
+                        type="radio"
+                        name="tipoMov"
+                        value={t.v}
+                        checked={tipoMovimento === t.v}
+                        onChange={() => setTipoMovimento(t.v as TipoMovimentoERP)}
+                        className="mr-2"
+                      />
+                      {t.l}
+                    </label>
+                  ))}
+                </div>
+                <p className="text-[11px] text-gray-500 mt-2">
+                  Serão exportadas apenas parcelas pendentes / em aberto no período.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -99,10 +138,10 @@ function ExportModal({ isOpen, onClose, onConfirm, type }: ExportModalProps) {
             Cancelar
           </button>
           <button
-            onClick={() => onConfirm(startDate, endDate)}
+            onClick={() => onConfirm(startDate, endDate, tipoMovimento)}
             className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
           >
-            Exportar
+            Exportar {isTxt ? "TXT" : ""}
           </button>
         </div>
       </div>
@@ -119,7 +158,7 @@ export function InstallmentsReport({
   const [filterStatus, setFilterStatus] = useState("all");
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
-  const [exportType, setExportType] = useState<"excel" | "pdf">("excel");
+  const [exportType, setExportType] = useState<"excel" | "pdf" | "txt">("excel");
 
   // Estados para exportação ERP
   const [clienteSelecionado, setClienteSelecionado] = useState<any>(null);
@@ -268,18 +307,96 @@ export function InstallmentsReport({
     }
   };
 
-  const handleExportClick = (type: "excel" | "pdf") => {
+  const handleExportClick = (type: "excel" | "pdf" | "txt") => {
     setExportType(type);
     setShowExportModal(true);
     setShowExportOptions(false);
   };
 
-  const handleExportConfirm = async (startDate: Date, endDate: Date) => {
+  const handleExportConfirm = async (startDate: Date, endDate: Date, tipoMov?: TipoMovimentoERP) => {
     setShowExportModal(false);
     if (exportType === "excel") {
       await exportToExcel(startDate, endDate);
-    } else {
+    } else if (exportType === "pdf") {
       await exportToPDF(startDate, endDate);
+    } else if (exportType === "txt") {
+      await exportToTxtLote(startDate, endDate, tipoMov || "S");
+    }
+  };
+
+  // Helpers ERP para exportação em lote
+  const formatarNumeroERP = (valor: number | string, tamanho: number): string => {
+    const num = String(valor).replace(/\D/g, "");
+    return num.padStart(tamanho, "0").slice(-tamanho);
+  };
+  const formatarAlfaERP = (valor: string | null | undefined): string => {
+    if (!valor) return '""';
+    const limpo = valor.replace(/"/g, '""').replace(/\n/g, " ").replace(/\r/g, "");
+    return `"${limpo}"`;
+  };
+  const formatarDataERP = (data: string | Date): string => {
+    const d = typeof data === "string" ? new Date(data) : data;
+    const ano = d.getFullYear();
+    const mes = String(d.getMonth() + 1).padStart(2, "0");
+    const dia = String(d.getDate()).padStart(2, "0");
+    return `${ano}${mes}${dia}`;
+  };
+  const formatarDecimalERP = (valor: number): string => valor.toFixed(2).replace(",", ".");
+
+  const exportToTxtLote = async (startDate: Date, endDate: Date, tipoMov: TipoMovimentoERP) => {
+    try {
+      const allParcelas = await getAllParcelasForExport(startDate, endDate);
+      const pendentes = allParcelas.filter((p: any) => p.status !== "pago" && p.status !== "cancelado");
+
+      if (pendentes.length === 0) {
+        alert("Nenhuma parcela pendente no período selecionado.");
+        return;
+      }
+
+      const linhas = pendentes.map((parcela: any) => {
+        const cliente = parcela.pre_pedidos?.clientes;
+        const doc = (cliente?.cnpj || cliente?.cpf || "").replace(/\D/g, "");
+        const numParcela = parcela.numero_parcela || 1;
+        const valor = parcela.valor_parcela - (parcela.valor_pago || 0);
+
+        // Tenta usar nota fiscal se houver, senão fallback
+        const campos: string[] = [];
+        campos.push(formatarNumeroERP(numParcela, 2)); // 01 - num parcela
+        campos.push(formatarAlfaERP(tipoMov)); // 02 - tipo mov
+        campos.push(formatarAlfaERP(doc)); // 03 - doc cliente
+        campos.push(formatarNumeroERP("0", 16)); // 04 - IE
+        campos.push(formatarNumeroERP(parcela.pre_pedidos?.id?.slice(-9) || "0", 9)); // 05 - NF inicial (fallback id)
+        campos.push(formatarNumeroERP(parcela.pre_pedidos?.id?.slice(-9) || "0", 9)); // 06 - NF final
+        campos.push(formatarAlfaERP(formatarDataERP(parcela.data_vencimento))); // 07 - data NF (usa vencimento como fallback)
+        campos.push(formatarAlfaERP(cliente?.estado || "SP")); // 08 - estado
+        campos.push(formatarAlfaERP("1")); // 09 - serie
+        campos.push(formatarAlfaERP("NF")); // 10 - especie
+        campos.push(formatarAlfaERP("55")); // 11 - modelo
+        campos.push(formatarAlfaERP("1102000")); // 12 - natureza
+        campos.push(formatarAlfaERP("")); // 13 - debito
+        campos.push(formatarAlfaERP("")); // 14 - credito
+        campos.push(formatarAlfaERP("")); // 15 - historico
+        campos.push(formatarDecimalERP(valor)); // 16 - valor
+        campos.push(formatarAlfaERP(formatarDataERP(parcela.data_vencimento))); // vencimento
+        campos.push(formatarAlfaERP(parcela.status)); // status
+        campos.push(formatarAlfaERP(`Parcela ${numParcela} - ${cliente?.razao_social || cliente?.nome || ""}`)); // obs
+
+        return campos.join(",");
+      });
+
+      const conteudo = linhas.join("\n");
+      const blob = new Blob([conteudo], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `duplicatas_erp_${startDate.toISOString().split("T")[0]}_a_${endDate.toISOString().split("T")[0]}_${tipoMov}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("Erro TXT lote", e);
+      alert("Erro ao gerar TXT");
     }
   };
 
@@ -566,20 +683,24 @@ export function InstallmentsReport({
                 <Download className="h-4 w-4 mr-2" /> Exportar
               </button>
               {showExportOptions && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200">
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg z-10 border border-gray-200">
                   <button
                     onClick={() => handleExportClick("excel")}
                     className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-t-md"
                   >
-                    <FileSpreadsheet className="h-4 w-4 mr-2 text-green-600" />{" "}
-                    Exportar Excel
+                    <FileSpreadsheet className="h-4 w-4 mr-2 text-green-600" /> Exportar Excel
                   </button>
                   <button
                     onClick={() => handleExportClick("pdf")}
-                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-b-md"
+                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                   >
-                    <FilePdf className="h-4 w-4 mr-2 text-red-600" /> Exportar
-                    PDF
+                    <FilePdf className="h-4 w-4 mr-2 text-red-600" /> Exportar PDF
+                  </button>
+                  <button
+                    onClick={() => handleExportClick("txt")}
+                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-b-md border-t"
+                  >
+                    <FileText className="h-4 w-4 mr-2 text-blue-600" /> Exportar TXT ERP (período)
                   </button>
                 </div>
               )}
