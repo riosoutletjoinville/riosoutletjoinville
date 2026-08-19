@@ -1,4 +1,4 @@
-// components/contador/InstallmentsReport.tsx - Versão com paginação e exportação
+// components/contador/InstallmentsReport.tsx - Versão corrigida
 "use client";
 
 import { useEffect, useState } from "react";
@@ -470,7 +470,7 @@ export function InstallmentsReport({
         .from("notas_fiscais")
         .select("*")
         .eq("pedido_id", pedidoId)
-        .maybeSingle(); // Usar maybeSingle para não dar erro se não encontrar
+        .maybeSingle();
 
       if (error) {
         console.error("Erro ao buscar nota fiscal:", error);
@@ -483,8 +483,8 @@ export function InstallmentsReport({
     }
   };
 
-  // Preparar exportação para ERP para um cliente específico
-  const prepararExportacaoERP = async (parcela: any) => {
+  // Função para exportar ERP diretamente sem modal de confirmação
+  const handleExportarERP = async (parcela: any) => {
     const cliente = parcela.pre_pedidos?.clientes;
     const pedidoId = parcela.pre_pedidos?.id;
 
@@ -504,6 +504,8 @@ export function InstallmentsReport({
     setClienteSelecionado(cliente);
     setNotaFiscalSelecionada(notaFiscal);
     setParcelasSelecionadas(parcelasDoCliente);
+    
+    // Abrir o modal centralizado para confirmar a exportação
     setMostrarModalERP(true);
   };
 
@@ -674,15 +676,15 @@ export function InstallmentsReport({
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Valor</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Status</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Data Pagamento</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Ações</th> {/* Nova coluna */}
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {parcelas.map((parcela) => {
                     const statusInfo = getStatusBadge(parcela.status, parcela.data_vencimento);
                     const StatusIcon = statusInfo.icon;
-                    const isPendente = parcela.status !== "pago" && parcela.status !== "cancelado";
                     
+                    // REMOVIDO O FILTRO - O botão aparece para TODAS as parcelas
                     return (
                       <tr key={parcela.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -710,16 +712,15 @@ export function InstallmentsReport({
                           {parcela.data_pagamento ? new Date(parcela.data_pagamento).toLocaleDateString('pt-BR') : '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          {isPendente && (
-                            <button
-                              onClick={() => prepararExportacaoERP(parcela)}
-                              className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 text-xs"
-                              title="Exportar duplicata para ERP"
-                            >
-                              <FileText size={12} className="mr-1" />
-                              Exportar ERP
-                            </button>
-                          )}
+                          {/* BOTÃO EXIBIDO PARA TODAS AS PARCELAS, SEM FILTRO */}
+                          <button
+                            onClick={() => handleExportarERP(parcela)}
+                            className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 text-xs"
+                            title="Exportar duplicata para ERP"
+                          >
+                            <FileText size={12} className="mr-1" />
+                            Exportar ERP
+                          </button>
                         </td>
                       </tr>
                     );
@@ -766,31 +767,32 @@ export function InstallmentsReport({
           </>
         )}
       </div>
-      
 
-      {/* Modal de Exportação para ERP */}
-      {mostrarModalERP && clienteSelecionado && (
-        <ExportarDuplicatasERP
-          parcelas={parcelasSelecionadas}
-          cliente={clienteSelecionado}
-          notaFiscal={notaFiscalSelecionada}
-          prePedidoId={parcelasSelecionadas[0]?.pre_pedido_id || ""}
-          onExportSuccess={() => {
-            setMostrarModalERP(false);
-            setClienteSelecionado(null);
-            setParcelasSelecionadas([]);
-          }}
-          onClose={() => {
-            setMostrarModalERP(false);
-            setClienteSelecionado(null);
-            setParcelasSelecionadas([]);
-          }}
-        />
+      {/* Modal de Exportação para ERP - Centralizado na tela */}
+     {mostrarModalERP  && clienteSelecionado && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <ExportarDuplicatasERP
+              parcelas={parcelasSelecionadas}
+              cliente={clienteSelecionado}
+              notaFiscal={notaFiscalSelecionada}
+              prePedidoId={parcelasSelecionadas[0]?.pre_pedido_id || ""}
+              onExportSuccess={() => {
+                setMostrarModalERP(false);
+                setClienteSelecionado(null);
+                setParcelasSelecionadas([]);
+              }}
+              onClose={() => {
+                setMostrarModalERP(false);
+                setClienteSelecionado(null);
+                setParcelasSelecionadas([]);
+              }}
+            />
+          </div>
+        </div>
       )}
 
       {/* ExportModal existente */}
-      <ExportModal isOpen={showExportModal} onClose={() => setShowExportModal(false)} onConfirm={handleExportConfirm} type={exportType} />
-
       <ExportModal
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
