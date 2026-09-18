@@ -1,4 +1,4 @@
-// components/contador/InstallmentsReport.tsx - Versão corrigida
+// components/contador/InstallmentsReport.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -37,6 +37,27 @@ interface ExportModalProps {
 }
 
 type TipoMovimentoERP = "E" | "S" | "R" | "D";
+
+const CLIENTE_SELECT = `
+  id,
+  tipo_cliente,
+  nome,
+  sobrenome,
+  razao_social,
+  nome_fantasia,
+  cpf,
+  cnpj,
+  inscricao_estadual,
+  email,
+  telefone,
+  endereco,
+  numero,
+  complemento,
+  bairro,
+  cidade,
+  estado,
+  cep
+`;
 
 function ExportModal({ isOpen, onClose, onConfirm, type }: ExportModalProps) {
   const [startDate, setStartDate] = useState(
@@ -160,13 +181,11 @@ export function InstallmentsReport({
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportType, setExportType] = useState<"excel" | "pdf" | "txt">("excel");
 
-  // Estados para exportação ERP
   const [clienteSelecionado, setClienteSelecionado] = useState<any>(null);
   const [notaFiscalSelecionada, setNotaFiscalSelecionada] = useState<any>(null);
   const [parcelasSelecionadas, setParcelasSelecionadas] = useState<any[]>([]);
   const [mostrarModalERP, setMostrarModalERP] = useState(false);
 
-  // Paginação
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [totalItems, setTotalItems] = useState(0);
@@ -201,7 +220,7 @@ export function InstallmentsReport({
             id,
             total,
             cliente_id,
-            clientes (nome, razao_social, cpf, cnpj)
+            clientes (${CLIENTE_SELECT})
           )
         `,
           { count: "exact" },
@@ -228,11 +247,10 @@ export function InstallmentsReport({
       setParcelas(data || []);
       setTotalItems(count || 0);
 
-      // Calcular totais por status (buscar todos para os totais)
       const allQuery = supabase
         .from("pre_pedido_parcelas")
         .select(
-          `*, pre_pedidos (id, total, cliente_id, clientes (nome, razao_social, cpf, cnpj))`,
+          `*, pre_pedidos (id, total, cliente_id, clientes (${CLIENTE_SELECT}))`,
         )
         .gte("data_vencimento", startDateStr)
         .lte("data_vencimento", endDateStr);
@@ -280,7 +298,7 @@ export function InstallmentsReport({
             id,
             total,
             cliente_id,
-            clientes (nome, razao_social, cpf, cnpj)
+            clientes (${CLIENTE_SELECT})
           )
         `,
         )
@@ -324,7 +342,6 @@ export function InstallmentsReport({
     }
   };
 
-  // Helpers ERP para exportação em lote
   const formatarNumeroERP = (valor: number | string, tamanho: number): string => {
     const num = String(valor).replace(/\D/g, "");
     return num.padStart(tamanho, "0").slice(-tamanho);
@@ -359,27 +376,26 @@ export function InstallmentsReport({
         const numParcela = parcela.numero_parcela || 1;
         const valor = parcela.valor_parcela - (parcela.valor_pago || 0);
 
-        // Tenta usar nota fiscal se houver, senão fallback
         const campos: string[] = [];
-        campos.push(formatarNumeroERP(numParcela, 2)); // 01 - num parcela
-        campos.push(formatarAlfaERP(tipoMov)); // 02 - tipo mov
-        campos.push(formatarAlfaERP(doc)); // 03 - doc cliente
-        campos.push(formatarNumeroERP("0", 16)); // 04 - IE
-        campos.push(formatarNumeroERP(parcela.pre_pedidos?.id?.slice(-9) || "0", 9)); // 05 - NF inicial (fallback id)
-        campos.push(formatarNumeroERP(parcela.pre_pedidos?.id?.slice(-9) || "0", 9)); // 06 - NF final
-        campos.push(formatarAlfaERP(formatarDataERP(parcela.data_vencimento))); // 07 - data NF (usa vencimento como fallback)
-        campos.push(formatarAlfaERP(cliente?.estado || "SP")); // 08 - estado
-        campos.push(formatarAlfaERP("1")); // 09 - serie
-        campos.push(formatarAlfaERP("NF")); // 10 - especie
-        campos.push(formatarAlfaERP("55")); // 11 - modelo
-        campos.push(formatarAlfaERP("1102000")); // 12 - natureza
-        campos.push(formatarAlfaERP("")); // 13 - debito
-        campos.push(formatarAlfaERP("")); // 14 - credito
-        campos.push(formatarAlfaERP("")); // 15 - historico
-        campos.push(formatarDecimalERP(valor)); // 16 - valor
-        campos.push(formatarAlfaERP(formatarDataERP(parcela.data_vencimento))); // vencimento
-        campos.push(formatarAlfaERP(parcela.status)); // status
-        campos.push(formatarAlfaERP(`Parcela ${numParcela} - ${cliente?.razao_social || cliente?.nome || ""}`)); // obs
+        campos.push(formatarNumeroERP(numParcela, 2));
+        campos.push(formatarAlfaERP(tipoMov));
+        campos.push(formatarAlfaERP(doc));
+        campos.push(formatarNumeroERP("0", 16));
+        campos.push(formatarNumeroERP(parcela.pre_pedidos?.id?.slice(-9) || "0", 9));
+        campos.push(formatarNumeroERP(parcela.pre_pedidos?.id?.slice(-9) || "0", 9));
+        campos.push(formatarAlfaERP(formatarDataERP(parcela.data_vencimento)));
+        campos.push(formatarAlfaERP(cliente?.estado || "SP"));
+        campos.push(formatarAlfaERP("1"));
+        campos.push(formatarAlfaERP("NF"));
+        campos.push(formatarAlfaERP("55"));
+        campos.push(formatarAlfaERP("1102000"));
+        campos.push(formatarAlfaERP(""));
+        campos.push(formatarAlfaERP(""));
+        campos.push(formatarAlfaERP(""));
+        campos.push(formatarDecimalERP(valor));
+        campos.push(formatarAlfaERP(formatarDataERP(parcela.data_vencimento)));
+        campos.push(formatarAlfaERP(parcela.status));
+        campos.push(formatarAlfaERP(`Parcela ${numParcela} - ${cliente?.razao_social || cliente?.nome || ""}`));
 
         return campos.join(",");
       });
@@ -580,7 +596,6 @@ export function InstallmentsReport({
     }
   };
 
-  // Buscar nota fiscal relacionada a um pedido
   const buscarNotaFiscalPorPedido = async (pedidoId: string) => {
     try {
       const { data, error } = await supabase
@@ -600,31 +615,42 @@ export function InstallmentsReport({
     }
   };
 
-  // Função para exportar ERP diretamente sem modal de confirmação
-  const handleExportarERP = async (parcela: any) => {
-    const cliente = parcela.pre_pedidos?.clientes;
-    const pedidoId = parcela.pre_pedidos?.id;
+ const handleExportarERP = async (parcela: any) => {
+  const clienteBasico = parcela.pre_pedidos?.clientes;
+  const pedidoId = parcela.pre_pedidos?.id;
 
-    if (!cliente) {
-      alert("Cliente não encontrado para esta parcela.");
-      return;
-    }
+  if (!clienteBasico?.id) {
+    Swal.fire({ icon: "error", title: "Cliente não encontrado", text: "Cliente não encontrado para esta parcela." });
+    return;
+  }
 
-    // Buscar todas as parcelas do mesmo cliente no período filtrado
-    const parcelasDoCliente = parcelas.filter(
-      (p) => p.pre_pedidos?.clientes?.id === cliente.id,
-    );
+  // Buscar cliente completo
+  const { data: clienteCompleto } = await supabase
+    .from("clientes")
+    .select("id, tipo_cliente, nome, sobrenome, razao_social, nome_fantasia, cpf, cnpj, inscricao_estadual, email, telefone, endereco, numero, complemento, bairro, cidade, estado, cep")
+    .eq("id", clienteBasico.id)
+    .single();
 
-    // Buscar nota fiscal associada
-    const notaFiscal = await buscarNotaFiscalPorPedido(pedidoId);
+  // Buscar TODAS as parcelas do MESMO PEDIDO (não do cliente)
+  const prePedidoId = parcela.pre_pedido_id;
+  const { data: parcelasDoPedido, error } = await supabase
+    .from("pre_pedido_parcelas")
+    .select("*")
+    .eq("pre_pedido_id", prePedidoId)
+    .order("numero_parcela", { ascending: true });
 
-    setClienteSelecionado(cliente);
-    setNotaFiscalSelecionada(notaFiscal);
-    setParcelasSelecionadas(parcelasDoCliente);
-    
-    // Abrir o modal centralizado para confirmar a exportação
-    setMostrarModalERP(true);
-  };
+  if (error || !parcelasDoPedido || parcelasDoPedido.length === 0) {
+    Swal.fire({ icon: "error", title: "Erro", text: "Não foi possível carregar as parcelas deste pedido." });
+    return;
+  }
+
+  const notaFiscal = await buscarNotaFiscalPorPedido(pedidoId);
+
+  setClienteSelecionado(clienteCompleto || clienteBasico);
+  setNotaFiscalSelecionada(notaFiscal);
+  setParcelasSelecionadas(parcelasDoPedido);
+  setMostrarModalERP(true);
+};
 
   const getStatusText = (status: string) => {
     switch (status) {
@@ -707,7 +733,6 @@ export function InstallmentsReport({
             </div>
           </div>
 
-          {/* Cards Resumo */}
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
             <div className="bg-blue-50 rounded-lg p-4">
               <p className="text-sm text-blue-600">A Pagar</p>
@@ -747,7 +772,6 @@ export function InstallmentsReport({
             </div>
           </div>
 
-          {/* Filtros */}
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -804,8 +828,7 @@ export function InstallmentsReport({
                   {parcelas.map((parcela) => {
                     const statusInfo = getStatusBadge(parcela.status, parcela.data_vencimento);
                     const StatusIcon = statusInfo.icon;
-                    
-                    // REMOVIDO O FILTRO - O botão aparece para TODAS as parcelas
+
                     return (
                       <tr key={parcela.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -833,7 +856,6 @@ export function InstallmentsReport({
                           {parcela.data_pagamento ? new Date(parcela.data_pagamento).toLocaleDateString('pt-BR') : '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          {/* BOTÃO EXIBIDO PARA TODAS AS PARCELAS, SEM FILTRO */}
                           <button
                             onClick={() => handleExportarERP(parcela)}
                             className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 text-xs"
@@ -889,8 +911,7 @@ export function InstallmentsReport({
         )}
       </div>
 
-      {/* Modal de Exportação para ERP - Centralizado na tela */}
-     {mostrarModalERP  && clienteSelecionado && (
+      {mostrarModalERP && clienteSelecionado && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <ExportarDuplicatasERP
@@ -913,7 +934,6 @@ export function InstallmentsReport({
         </div>
       )}
 
-      {/* ExportModal existente */}
       <ExportModal
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
