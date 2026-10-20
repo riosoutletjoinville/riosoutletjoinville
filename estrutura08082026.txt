@@ -1,0 +1,590 @@
+.
+├── README.md
+├── buckets_completo.sql
+├── components.json
+├── eslint.config.js
+├── estrutura.txt
+├── estrutura08082026.txt
+├── next-env.d.ts
+├── next.config.ts
+├── package-lock.json
+├── package.json
+├── postcss.config.mjs
+├── public
+│   ├── banners
+│   │   ├── banner-sandalias.jpg
+│   │   ├── banner-tenis-1.jpg
+│   │   └── banner-tenis.jpg
+│   ├── bn-1920x1080.png
+│   ├── favicon.ico
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── images
+│   │   └── pagamentos
+│   │       ├── american-express.webp
+│   │       ├── celo.webp
+│   │       ├── default-brand-mercadopago.webp
+│   │       ├── hipercard.webp
+│   │       ├── mastercard.webp
+│   │       ├── mercado-credito.webp
+│   │       ├── pix.webp
+│   │       └── visa.webp
+│   ├── logo-ajs.png
+│   ├── logomarca
+│   │   ├── logo-ajs.png
+│   │   ├── logo.png
+│   │   └── logotranspbranca.png
+│   ├── logomarca.jpg
+│   ├── logomarca.png
+│   ├── next.svg
+│   ├── vercel.svg
+│   └── window.svg
+├── schema_completo.sql
+├── schema_completo08082026.sql
+├── schema_completo_1.sql
+├── scripts
+│   ├── backup-bucket-full.sh
+│   ├── backup-full.sh
+│   ├── backups
+│   │   ├── backup_20260618_074847.log
+│   │   ├── backup_completo_20260618_074847.tar.gz
+│   │   ├── banners_20260618_074847.tar.gz
+│   │   ├── images-marcas_20260618_074847.tar.gz
+│   │   ├── metadata_20260618_074847.txt
+│   │   ├── nfe-danfe_20260618_074847.tar.gz
+│   │   ├── nfe-xml_20260618_074847.tar.gz
+│   │   └── produtos_20260618_074847.tar.gz
+│   ├── limpar-base-dados.sh
+│   ├── restore-backup-bucket.sh
+│   └── restore-backup-full.sh
+├── src
+│   ├── app
+│   │   ├── IndexContent.tsx
+│   │   ├── api
+│   │   │   ├── certificados
+│   │   │   │   └── verificar
+│   │   │   │       └── route.ts
+│   │   │   ├── clientes
+│   │   │   │   ├── atualizar
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── auth
+│   │   │   │   │   ├── cadastro
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   ├── login
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   ├── logout
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   ├── me
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── sessao
+│   │   │   │   │       └── route.ts
+│   │   │   │   ├── nfe
+│   │   │   │   │   ├── [id]
+│   │   │   │   │   │   └── xml
+│   │   │   │   │   │       └── route.ts
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── pedidos
+│   │   │   │       ├── [id]
+│   │   │   │       │   └── route.ts
+│   │   │   │       └── route.ts
+│   │   │   ├── configuracoes-fiscais
+│   │   │   │   └── route.ts
+│   │   │   ├── cron
+│   │   │   │   └── nfe
+│   │   │   │       └── route.ts
+│   │   │   ├── debug-cert
+│   │   │   │   └── route.ts
+│   │   │   ├── debug-mp
+│   │   │   │   └── route.ts
+│   │   │   ├── frete
+│   │   │   │   ├── auth
+│   │   │   │   │   ├── callback
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── calcular
+│   │   │   │       └── route.ts
+│   │   │   ├── image-proxy
+│   │   │   │   ├── envio.txt
+│   │   │   │   └── route.ts
+│   │   │   ├── mercadolibre
+│   │   │   │   ├── auth
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── callback
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── config
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── delete-item
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── items
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── shipping
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── size-grids
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── upload-image
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── user-products
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── webhooks
+│   │   │   │       └── route.ts
+│   │   │   ├── mercadopago
+│   │   │   │   ├── checkout
+│   │   │   │   │   ├── logado
+│   │   │   │   │   │   ├── route copy.ts
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── pix
+│   │   │   │   │   ├── route copy.ts
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── process-payment
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── verify-token
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── webhook
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── webhook-test
+│   │   │   │       └── route.ts
+│   │   │   ├── newsletter
+│   │   │   │   ├── assinatura
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── confirmar
+│   │   │   │       └── route.ts
+│   │   │   ├── nfe
+│   │   │   │   ├── [id]
+│   │   │   │   │   ├── cancelar
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   ├── consultar
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── xml
+│   │   │   │   │       └── route.ts
+│   │   │   │   ├── buscar-ref
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── emitir
+│   │   │   │   │   ├── route.ts
+│   │   │   │   │   ├── route_orig_vs2.ts
+│   │   │   │   │   └── route_original.ts
+│   │   │   │   └── webhook
+│   │   │   │       └── route.ts
+│   │   │   ├── notifications
+│   │   │   │   ├── batch
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── count
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── route.ts
+│   │   │   ├── pedidos
+│   │   │   │   ├── [id]
+│   │   │   │   │   ├── cancelar
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── status
+│   │   │   │   │       └── route.ts
+│   │   │   │   └── route.ts
+│   │   │   ├── pre-pedidos
+│   │   │   │   └── limpar
+│   │   │   │       └── route.ts
+│   │   │   ├── test-mp
+│   │   │   │   └── route.ts
+│   │   │   └── usuario
+│   │   │       └── perfil
+│   │   │           └── route.ts
+│   │   ├── busca
+│   │   │   ├── loading.tsx
+│   │   │   └── page.tsx
+│   │   ├── carrinho
+│   │   │   ├── CarrinhoContent.tsx
+│   │   │   ├── loading.tsx
+│   │   │   └── page.tsx
+│   │   ├── categoria
+│   │   │   └── [slug]
+│   │   │       ├── CategoriasFilters.tsx
+│   │   │       ├── loading.tsx
+│   │   │       └── page.tsx
+│   │   ├── categorias
+│   │   │   ├── CategoriasContent.tsx
+│   │   │   ├── loading.tsx
+│   │   │   └── page.tsx
+│   │   ├── checkout
+│   │   │   ├── CheckoutPageContent copy.tsx
+│   │   │   ├── CheckoutPageContent.tsx
+│   │   │   ├── CheckoutWrapper.tsx
+│   │   │   ├── erro
+│   │   │   │   ├── CheckoutErroContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── loading.tsx
+│   │   │   ├── logado
+│   │   │   │   ├── CheckoutLogadoContent copy.tsx
+│   │   │   │   ├── CheckoutLogadoContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── page.tsx
+│   │   │   └── sucesso
+│   │   │       ├── CheckoutSucessoContent.tsx
+│   │   │       └── page.tsx
+│   │   ├── dashboard
+│   │   │   ├── DashboardPageContent.tsx
+│   │   │   ├── [...catchAll]
+│   │   │   │   └── page.tsx
+│   │   │   ├── admin
+│   │   │   │   └── users
+│   │   │   │       ├── AdminUsersContent.tsx
+│   │   │   │       └── page.tsx
+│   │   │   ├── banners
+│   │   │   │   ├── BannersContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── categorias
+│   │   │   │   ├── CategoriasContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── clientes
+│   │   │   │   ├── ClientesContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── configuracoes-fiscais
+│   │   │   │   ├── ConfiguracoesFiscaisContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── contador
+│   │   │   │   ├── ContadorContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── cores
+│   │   │   │   ├── ColorsContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── financeiro
+│   │   │   │   ├── FinanceiroContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── generos
+│   │   │   │   ├── GenerosContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── layout.tsx
+│   │   │   ├── marcas
+│   │   │   │   ├── MarcasContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── mercado-livre
+│   │   │   │   ├── MecadoLivreContent.tsx
+│   │   │   │   ├── auth
+│   │   │   │   │   ├── AuthMLContent.tsx
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── config
+│   │   │   │   │   ├── MercadoLivreConfig.tsx
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── debug
+│   │   │   │   │   ├── DebugMLContent.tsx
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── orders
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   └── products
+│   │   │   │       ├── MercadoLivreProdutos.tsx
+│   │   │   │       ├── page.tsx
+│   │   │   │       └── sync
+│   │   │   │           ├── SyncMLContent.tsx
+│   │   │   │           └── page.tsx
+│   │   │   ├── newsletter
+│   │   │   │   ├── NewsletterContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── nfe
+│   │   │   │   ├── NfeContent.tsx
+│   │   │   │   ├── [id]
+│   │   │   │   │   ├── danfe
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── emitir
+│   │   │   │   │   ├── NfeEmitirContent.tsx
+│   │   │   │   │   ├── loading.tsx
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── not-found.tsx
+│   │   │   ├── notificacoes
+│   │   │   │   ├── NotificacoesContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── page.tsx
+│   │   │   ├── pedidos
+│   │   │   │   ├── PedidosContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── produtos
+│   │   │   │   ├── ProdutosContent.tsx
+│   │   │   │   ├── ProdutosContent.txt
+│   │   │   │   ├── ProdutosContent_2.txt
+│   │   │   │   ├── ProdutosContent_filtros_Colapsaveis.txt
+│   │   │   │   └── page.tsx
+│   │   │   ├── relatorios
+│   │   │   │   ├── RelatoriosContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── sessoes
+│   │   │   │   ├── SessoesContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   └── tamanhos
+│   │   │       ├── TamanhosContent.tsx
+│   │   │       └── page.tsx
+│   │   ├── desenvolvimento
+│   │   │   ├── DesenvolvimentoContent.tsx
+│   │   │   └── page.tsx
+│   │   ├── favicon.ico
+│   │   ├── globals.css
+│   │   ├── globals.css.d.ts
+│   │   ├── layout.tsx
+│   │   ├── login
+│   │   │   ├── LoginPageContent.tsx
+│   │   │   ├── loading.tsx
+│   │   │   └── page.tsx
+│   │   ├── logomarca.jpg
+│   │   ├── logomarca.png
+│   │   ├── marca
+│   │   │   └── [slug]
+│   │   │       ├── MarcaFilters.tsx
+│   │   │       ├── loading.tsx
+│   │   │       └── page.tsx
+│   │   ├── minha-conta
+│   │   │   ├── MinhaContaContent.tsx
+│   │   │   ├── dados
+│   │   │   │   ├── DadoClienteContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── enderecos
+│   │   │   │   ├── MinhaContaEnderecoContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── loading.tsx
+│   │   │   ├── login
+│   │   │   │   ├── LoginContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── nfe
+│   │   │   │   ├── NfeClientePageContent.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── page.tsx
+│   │   │   └── pedidos
+│   │   │       ├── PedidosPageContent.tsx
+│   │   │       ├── [id]
+│   │   │       │   ├── PedidosIdPageContent.tsx
+│   │   │       │   └── page.tsx
+│   │   │       └── page.tsx
+│   │   ├── newsletter
+│   │   │   └── confimarcao-sucesso
+│   │   │       ├── ConfirmacaoSucessoContent.tsx
+│   │   │       └── page.tsx
+│   │   ├── not-found.tsx
+│   │   ├── page.tsx
+│   │   ├── produto
+│   │   │   └── [slug]
+│   │   │       ├── loading.tsx
+│   │   │       └── page.tsx
+│   │   ├── robots.ts
+│   │   ├── sessao
+│   │   │   └── [slug]
+│   │   │       ├── loading.tsx
+│   │   │       └── page.tsx
+│   │   └── sitemap.ts
+│   ├── components
+│   │   ├── auth
+│   │   │   ├── LoginForm.tsx
+│   │   │   └── RouteGuard.tsx
+│   │   ├── carrinho
+│   │   ├── checkout
+│   │   │   ├── CheckoutEndereco.tsx
+│   │   │   ├── CheckoutFormSkeleton.tsx
+│   │   │   ├── CheckoutHeader.tsx
+│   │   │   ├── CheckoutPagamento.tsx
+│   │   │   ├── CheckoutProgresso.tsx
+│   │   │   ├── CheckoutResumo.tsx
+│   │   │   ├── CheckoutSkeleton.tsx
+│   │   │   ├── ClienteOptions copy.tsx
+│   │   │   ├── ClienteOptions.tsx
+│   │   │   ├── PixPayment copy.tsx
+│   │   │   └── PixPayment.tsx
+│   │   ├── clientes
+│   │   │   └── HeaderClientes.tsx
+│   │   ├── contador
+│   │   │   ├── DateRangePicker.tsx
+│   │   │   ├── FinancialSummary.tsx
+│   │   │   ├── FiscalReport.tsx
+│   │   │   ├── FiscalSummary.tsx
+│   │   │   ├── InstallmentsReport.tsx
+│   │   │   ├── NFList.tsx
+│   │   │   └── OrdersSummary.tsx
+│   │   ├── dashboard
+│   │   │   ├── AdicionarProdutoModal.tsx
+│   │   │   ├── BaixaEstoqueModal.tsx
+│   │   │   ├── ChartsSection.tsx
+│   │   │   ├── DANFE.tsx
+│   │   │   ├── DANFEPrint.tsx
+│   │   │   ├── DashboardNav.tsx
+│   │   │   ├── DragDropDashboard.tsx
+│   │   │   ├── EmissaoNFModal.tsx
+│   │   │   ├── ExportarDuplicatasERP.tsx
+│   │   │   ├── FinancialSummary.tsx
+│   │   │   ├── MLButtonsProductActions.tsx
+│   │   │   ├── MLProductActions.tsx
+│   │   │   ├── MercadoLivreConfig.tsx
+│   │   │   ├── PedidosMetrics.tsx
+│   │   │   ├── QuickActions.tsx
+│   │   │   ├── RecentActivities.tsx
+│   │   │   ├── RelatorioBaixas.tsx
+│   │   │   ├── SelecionarClienteModal.tsx
+│   │   │   ├── SelecionarCondicaoPagamentoModal.tsx
+│   │   │   ├── SelecionarStatusModal.tsx
+│   │   │   ├── SessaoModal.tsx
+│   │   │   ├── StatCard.tsx
+│   │   │   ├── StatusTimeline.tsx
+│   │   │   ├── SystemStatus.tsx
+│   │   │   ├── VincularPedidoAnteriorModal.tsx
+│   │   │   ├── alert-dialog.tsx
+│   │   │   ├── financeiro
+│   │   │   │   ├── ComprovantePagamento.tsx
+│   │   │   │   ├── ModalNegociarParcela.tsx
+│   │   │   │   ├── ModalPagamentoParcial.tsx
+│   │   │   │   ├── ModalPagamentoTotal.tsx
+│   │   │   │   ├── ParcelasManagement.tsx
+│   │   │   │   └── VisualizarParcelasModal.tsx
+│   │   │   ├── nfe
+│   │   │   │   ├── NFeForm.tsx
+│   │   │   │   ├── NFeList.tsx
+│   │   │   │   └── NFeStatusBadge.tsx
+│   │   │   ├── pedidos
+│   │   │   │   ├── AcoesPedidoModal.tsx
+│   │   │   │   ├── EditarPedidoModal.tsx
+│   │   │   │   ├── PedidosTableSkeleton.tsx
+│   │   │   │   ├── PrePedidoModal.tsx
+│   │   │   │   ├── PrePedidoPreview.tsx
+│   │   │   │   └── VisualizarPedidoModal.tsx
+│   │   │   └── produtos
+│   │   │       ├── CatalogoModal.tsx
+│   │   │       ├── CoresModal.tsx
+│   │   │       ├── ImagensModal.tsx
+│   │   │       ├── ProdutosSkeleton.tsx
+│   │   │       ├── SelecionarSessoesModal.tsx
+│   │   │       └── VariacoesModal.tsx
+│   │   ├── debug
+│   │   │   └── DebugCarrinho.tsx
+│   │   ├── notifications
+│   │   │   └── NotificationBell.tsx
+│   │   ├── pixel
+│   │   │   └── PixelProvider.tsx
+│   │   ├── seo
+│   │   │   ├── ProductStructuredData.tsx
+│   │   │   └── StructuredData.tsx
+│   │   ├── skeleton
+│   │   │   ├── CategoriesGridSkeleton.tsx
+│   │   │   ├── CategorySkeleton.tsx
+│   │   │   ├── HeaderSkeleton.tsx
+│   │   │   ├── ProductSkeleton.tsx
+│   │   │   └── ProductsGridSkeleton.tsx
+│   │   ├── template
+│   │   │   ├── Footer.tsx
+│   │   │   ├── NewsletterSection.tsx
+│   │   │   ├── SessoesEspeciais.tsx
+│   │   │   ├── header
+│   │   │   │   ├── CategoriasDropdown.tsx
+│   │   │   │   ├── HeaderBottom.tsx
+│   │   │   │   ├── HeaderMain.tsx
+│   │   │   │   ├── HeaderTop.tsx
+│   │   │   │   ├── MarcasList.tsx
+│   │   │   │   ├── MarcasTodas.tsx
+│   │   │   │   ├── QuickFilters.tsx
+│   │   │   │   ├── SearchBar.tsx
+│   │   │   │   ├── SearchModal.tsx
+│   │   │   │   └── index.tsx
+│   │   │   └── search
+│   │   │       └── SearchResults.tsx
+│   │   ├── theme
+│   │   │   └── ThemeToggle.tsx
+│   │   └── ui
+│   │       ├── AddToCartButton.tsx
+│   │       ├── Breadcrumbs.tsx
+│   │       ├── CarrinhoModal.tsx
+│   │       ├── CategoriasGrid.tsx
+│   │       ├── ConfirmEmitModal.tsx
+│   │       ├── Desenvolvimento.tsx
+│   │       ├── ExpandableText.tsx
+│   │       ├── FiltroLateral copy.tsx
+│   │       ├── FiltroLateral.tsx
+│   │       ├── FiltroPrecoRangeLateral.tsx
+│   │       ├── FloatingButtons.tsx
+│   │       ├── FormattedInput.tsx
+│   │       ├── InputMoeda.tsx
+│   │       ├── LoadingBar.tsx
+│   │       ├── LoadingOverlay.tsx
+│   │       ├── MobileMenu.tsx
+│   │       ├── PriceRangeSlider.tsx
+│   │       ├── ProductCard.tsx
+│   │       ├── ProductFilters.tsx
+│   │       ├── ProductGrid.tsx
+│   │       ├── ProductImage.tsx
+│   │       ├── ProdutoGallery.tsx
+│   │       ├── ScrollToTop.tsx
+│   │       ├── SimpleHeader.tsx
+│   │       ├── ZoomableImage.tsx
+│   │       ├── alert-dialog.tsx
+│   │       ├── alert.tsx
+│   │       ├── button.tsx
+│   │       ├── card.tsx
+│   │       ├── carousel.tsx
+│   │       ├── carousel2.tsx
+│   │       ├── dialog.tsx
+│   │       ├── input.tsx
+│   │       ├── label.tsx
+│   │       ├── radio-group.tsx
+│   │       ├── select.tsx
+│   │       ├── switch.tsx
+│   │       ├── table.tsx
+│   │       ├── tabs.tsx
+│   │       ├── tooltip.tsx
+│   │       └── whatsAppButton.tsx
+│   ├── contexts
+│   │   ├── AuthContext.tsx
+│   │   ├── ClienteAuthContext.tsx
+│   │   └── ThemeContext.tsx
+│   ├── hooks
+│   │   ├── useAuthSession.ts
+│   │   ├── useCarrinho.ts
+│   │   ├── useDashboardCache.ts
+│   │   ├── useFiltrosProdutos.ts
+│   │   ├── useImageZoom.ts
+│   │   ├── useMascaras.ts
+│   │   ├── useMercadoLivreConfig.ts
+│   │   ├── useNewsletter.ts
+│   │   ├── useNotifications.ts
+│   │   ├── usePageLoading.ts
+│   │   ├── usePaginationScroll.ts
+│   │   ├── usePaginationState.ts
+│   │   ├── usePermissions.ts
+│   │   ├── usePixelEvents.ts
+│   │   ├── useSearch.ts
+│   │   ├── useUsuario.ts
+│   │   └── useUsuarioPerfil.ts
+│   ├── lib
+│   │   ├── cliente-auth.ts
+│   │   ├── dateUtils.ts
+│   │   ├── formatUtils.ts
+│   │   ├── generatePDF.ts
+│   │   ├── generatePedidoPDF copy 2.ts
+│   │   ├── generatePedidoPDF copy.ts
+│   │   ├── generatePedidoPDF.ts
+│   │   ├── mercadolibre.ts
+│   │   ├── mercadopago.ts
+│   │   ├── nfe
+│   │   │   ├── focus-client.ts
+│   │   │   └── storage-service.ts
+│   │   ├── notifications.ts
+│   │   ├── pixel-manager.ts
+│   │   ├── products.ts
+│   │   ├── supabase-client.ts
+│   │   ├── supabase-server.ts
+│   │   ├── supabase.ts
+│   │   └── utils.ts
+│   ├── middleware.ts
+│   ├── services
+│   │   ├── autoNotifications.ts
+│   │   ├── cepService.ts
+│   │   └── nfeAutoService.ts
+│   ├── types
+│   │   ├── index.ts
+│   │   ├── mercadolibre-nfe.ts
+│   │   ├── mercadolibre.ts
+│   │   ├── mercadopago.ts
+│   │   ├── nfe.ts
+│   │   └── pre-pedido.ts
+│   └── utils
+│       ├── alerts.ts
+│       ├── dateUtils.ts
+│       ├── formatPhone.ts
+│       ├── freteUtils.ts
+│       └── validateFrete.ts
+├── tailwind.config.ts
+├── test-mp.js
+├── tsconfig.json
+└── vercel.json
+
+163 directories, 425 files
